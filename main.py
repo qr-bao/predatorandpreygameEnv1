@@ -106,7 +106,7 @@ while running:
                     for agent in sim.predators + sim.prey:
                         agent.selected = False
 
-    screen.fill((0, 0, 0))
+    screen.fill((255, 255, 255))
 
     # 绘制侧边栏背景
     pygame.draw.rect(screen, (50, 50, 50), (0, 0, sidebar_width, screen_height))
