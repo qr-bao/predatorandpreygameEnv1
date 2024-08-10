@@ -14,6 +14,8 @@ pygame.display.set_caption("Control Panel and Game Space")
 
 # 获取屏幕尺寸
 screen_width, screen_height = screen.get_size()
+#print(screen_width)
+#print(screen_height)
 
 # 字体设置
 font = pygame.font.Font(None, constants.FONT_SIZE)
@@ -106,7 +108,7 @@ while running:
                     for agent in sim.predators + sim.prey:
                         agent.selected = False
 
-    screen.fill((255, 255, 255))
+    screen.fill((0,0, 0))
 
     # 绘制侧边栏背景
     pygame.draw.rect(screen, (50, 50, 50), (0, 0, sidebar_width, screen_height))
@@ -120,7 +122,8 @@ while running:
 
     elif game_state == constants.IN_GAME:
         sim.check_events()
-        sim.add_food(delta_time)  # 传递时间间隔
+        sim.add_food()  # 传递时间间隔
+        
         sim.move_models()
         sim.prey_hunt()
         sim.predator_hunt()

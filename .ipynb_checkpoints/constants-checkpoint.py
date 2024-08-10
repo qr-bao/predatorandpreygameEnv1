@@ -30,7 +30,7 @@ MAIN_MENU = 0
 IN_GAME = 1
 
 # 小方块属性
-NUM_PREDATORS = 2  # 捕食者初始数量
+NUM_PREDATORS = 0  # 捕食者初始数量
 NUM_PREY = 30  # 猎物初始数量
 BLOCK_SIZE = 30
 
@@ -80,8 +80,6 @@ PREDATOR_MAX_TURNING_ANGLE = 0.8
 # 听觉范围
 PREDATOR_HEARING_RANGE = 800
 PREY_HEARING_RANGE = 800
-max_observation_count = 5
-max_hearing_count = 5
 
 # 健康值减少相关常量
 PREDATOR_ACCELERATION_HEALTH_DECAY_FACTOR = 0.05# 减少加速导致的健康值衰减

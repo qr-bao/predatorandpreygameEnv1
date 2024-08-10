@@ -90,124 +90,7 @@ class Creature(ABC):
             relative_y = distance * math.cos(relative_angle)
             
             return relative_x, relative_y
-    # def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
-    #     def is_in_sight(target):
-    #         dx = target.rect.centerx - self.rect.centerx
-    #         dy = target.rect.centery - self.rect.centery
-    #         distance = math.sqrt(dx**2 + dy**2)
-    #         angle_to_target = math.atan2(dy, dx)
-    #         relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
-    #         relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
-    #         return (distance <= self.sight_range) and (abs(relative_angle) <= self.sight_angle / 2)
-
-    #     def is_occluded(target, obstacles):
-    #         for obstacle in obstacles:
-    #             if self.rect.colliderect(obstacle.rect):
-    #                 continue
-    #             if self.line_intersects_rect((self.rect.centerx, self.rect.centery), (target.rect.centerx, target.rect.centery), obstacle.rect):
-    #                 return True
-    #         return False
-    #     def to_relative_coordinates(target):
-    #         # 计算相对于agent的dx, dy
-    #         relative_x = target.rect.centerx - self.rect.centerx
-    #         relative_y = target.rect.centery - self.rect.centery
-            
-    #         return relative_x, relative_y
-    #     def find_first_visible(targets, obstacles):
-    #         visible_targets = sorted(targets, key=lambda t: self.distance_to(t))
-    #         visible_list = []
-    #         for target in visible_targets:
-    #             if is_in_sight(target) and not is_occluded(target, obstacles):
-    #                 relative_x, relative_y = to_relative_coordinates(target)
-    #                 visible_list.append(
-    #                 {
-    #                     'type': target.__class__.__name__,
-    #                     'relative_x': relative_x,
-    #                     'relative_y': relative_y,
-    #                 }
-                
-    #                 )
-    #         return visible_list if visible_list else None
-
-    #     def is_in_hearing_range(target):
-    #         dx = target.rect.centerx - self.rect.centerx
-    #         dy = target.rect.centery - self.rect.centery
-    #         distance = math.sqrt(dx**2 + dy**2)
-    #         return distance <= self.hearing_range
-
-    #     def get_sound_intensity(target):
-    #         dx = target.rect.centerx - self.rect.centerx
-    #         dy = target.rect.centery - self.rect.centery
-    #         distance = math.sqrt(dx**2 + dy**2)
-    #         return max(0, (self.hearing_range - distance) / self.hearing_range)
-
-    #     def get_sound_direction(target):
-    #         dx = target.rect.centerx - self.rect.centerx
-    #         dy = target.rect.centery - self.rect.centery
-    #         angle_to_target = math.atan2(dy, dx)
-    #         relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
-    #         relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
-    #         return relative_angle
-    #     left_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1)]
-    #     right_boundary = [(constants.SCREEN_WIDTH1, 0), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
-    #     top_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.SCREEN_WIDTH1, 0)]
-    #     bottom_boundary = [(constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
-    #     visible_boundaries = []
-
-    #     # for boundary in [left_boundary, right_boundary, top_boundary, bottom_boundary]:
-    #     #     observed_mid_boundary = is_boundary_in_sight(boundary[0], boundary[1])
-    #     # 视觉感知
-    #     observed_predator = find_first_visible(env_predators, env_obstacles)
-    #     observed_prey = find_first_visible(env_prey, env_obstacles)
-    #     observed_food = find_first_visible(env_food, env_obstacles)
-    #     observed_obstacle = find_first_visible(env_obstacles, env_obstacles)
-
-
-    #     # 听觉感知
-    #     heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
-    #     heard_sounds = [
-    #         {
-    #             'type': entity.__class__.__name__,
-    #             'intensity': get_sound_intensity(entity),
-    #             'direction': get_sound_direction(entity)
-    #         } for entity in heard_entities
-    #     ]
-        
-    #     return observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds
     def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
-        def process_matrix(matrix, target_shape=(5, 3)):
-            """
-            裁剪或填充矩阵，使其保持 target_shape 的大小。
-
-            参数:
-            - matrix: 输入的矩阵，形状为 (N, 3)
-            - target_shape: 目标形状，默认为 (5, 3)
-
-            返回:
-            - 处理后的矩阵，形状为 target_shape
-            """
-            if not matrix:
-                # 如果矩阵为空，直接填充目标大小的零矩阵
-                return [[0] * target_shape[1] for _ in range(target_shape[0])]
-            current_rows = len(matrix)
-            current_cols = len(matrix[0]) if current_rows > 0 else 0
-
-            # 确保输入矩阵的列数正确
-            assert current_cols == target_shape[1], f"输入矩阵的列数应为 {target_shape[1]}，但得到了 {current_cols}"
-
-            # 如果当前矩阵行数大于目标行数，则进行裁剪
-            if current_rows > target_shape[0]:
-                processed_matrix = matrix[:target_shape[0]]
-            # 如果当前矩阵行数小于目标行数，则进行填充
-            elif current_rows < target_shape[0]:
-                processed_matrix = matrix[:]
-                padding_rows = target_shape[0] - current_rows
-                padding = [[0] * target_shape[1]] * padding_rows
-                processed_matrix.extend(padding)
-            else:
-                processed_matrix = matrix
-
-            return processed_matrix
         def is_in_sight(target):
             dx = target.rect.centerx - self.rect.centerx
             dy = target.rect.centery - self.rect.centery
@@ -224,22 +107,27 @@ class Creature(ABC):
                 if self.line_intersects_rect((self.rect.centerx, self.rect.centery), (target.rect.centerx, target.rect.centery), obstacle.rect):
                     return True
             return False
-
         def to_relative_coordinates(target):
             # 计算相对于agent的dx, dy
             relative_x = target.rect.centerx - self.rect.centerx
             relative_y = target.rect.centery - self.rect.centery
+            
             return relative_x, relative_y
-
-        def find_first_visible(targets, obstacles, type_id):
+        def find_first_visible(targets, obstacles):
             visible_targets = sorted(targets, key=lambda t: self.distance_to(t))
             visible_list = []
             for target in visible_targets:
                 if is_in_sight(target) and not is_occluded(target, obstacles):
                     relative_x, relative_y = to_relative_coordinates(target)
-                    visible_list.append([type_id, relative_x, relative_y])
-                    # visible_list = process_matrix(visible_list)
-            return visible_list
+                    visible_list.append(
+                    {
+                        'type': target.__class__.__name__,
+                        'relative_x': relative_x,
+                        'relative_y': relative_y,
+                    }
+                
+                    )
+            return visible_list if visible_list else None
 
         def is_in_hearing_range(target):
             dx = target.rect.centerx - self.rect.centerx
@@ -260,29 +148,32 @@ class Creature(ABC):
             relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
             relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
             return relative_angle
+        left_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1)]
+        right_boundary = [(constants.SCREEN_WIDTH1, 0), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
+        top_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.SCREEN_WIDTH1, 0)]
+        bottom_boundary = [(constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
+        visible_boundaries = []
 
-        # 收集视觉信息
-        observed_predator = find_first_visible(env_predators, env_obstacles, 1)
-        observed_prey = find_first_visible(env_prey, env_obstacles, 2)
-        observed_food = find_first_visible(env_food, env_obstacles, 3)
-        observed_obstacle = find_first_visible(env_obstacles, env_obstacles, 4)
+        # for boundary in [left_boundary, right_boundary, top_boundary, bottom_boundary]:
+        #     observed_mid_boundary = is_boundary_in_sight(boundary[0], boundary[1])
+        # 视觉感知
+        observed_predator = find_first_visible(env_predators, env_obstacles)
+        observed_prey = find_first_visible(env_prey, env_obstacles)
+        observed_food = find_first_visible(env_food, env_obstacles)
+        observed_obstacle = find_first_visible(env_obstacles, env_obstacles)
 
-        # 汇总所有视觉信息
-        other_data = observed_predator + observed_prey + observed_food + observed_obstacle
-        other_data = process_matrix(other_data)
-        # 收集听觉信息
+
+        # 听觉感知
         heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
-        sounds = [
-            [9, get_sound_intensity(entity), get_sound_direction(entity)]
-            for entity in heard_entities
+        heard_sounds = [
+            {
+                'type': entity.__class__.__name__,
+                'intensity': get_sound_intensity(entity),
+                'direction': get_sound_direction(entity)
+            } for entity in heard_entities
         ]
-        sounds =process_matrix(sounds)
-        # print(np.shape(other_data),np.shape(sounds),np.shape(other_data+sounds))
-        ob_env = other_data+sounds
-        # print(np.shape(other_data),np.shape(sounds))
-        print(np.shape(ob_env))
-        return np.array(ob_env)
-        # return np.array(other_data), np.array(sounds)
+        
+        return observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds
 
     def distance_to(self, other):
         dx = other.rect.centerx - self.rect.centerx

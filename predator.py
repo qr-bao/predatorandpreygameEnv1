@@ -19,11 +19,15 @@ class Predator(Creature):
 
     def set_prey_list(self, prey_list):
         self.prey_list = prey_list
+    def get_observe_info(self):
+        ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        return ob_env
 
     def move_strategy(self):
         Creature.reset_all_colors(self.env_predators + self.env_prey)
-        observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
-        move_vector = self.get_target(observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds)
+        ob_env = self.get_observe_info()
+        # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        move_vector = self.get_target(ob_env)
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
@@ -44,14 +48,18 @@ class Predator(Creature):
         self.rect.x += self.velocity[0]
         self.rect.y += self.velocity[1]
 
-    def get_target(self, observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds):
+    def get_target(self, ob_env):
         move_vector = [0, 0]
 
+        observed_prey = [item for item in ob_env if item[0] == 2]
+        observed_food = [item for item in ob_env if item[0] == 3]
+        sounds = [item for item in ob_env if item[0] == 9]
         if observed_prey:
             # 靠近猎物并加速
-            dx = observed_prey.rect.x - self.rect.x
-            dy = observed_prey.rect.y - self.rect.y
-            dist = self.distance_to(observed_prey)
+            closest_prey = min(observed_prey, key=lambda prey: math.sqrt(prey[1]**2 + prey[2]**2))
+            dx = closest_prey[1]
+            dy = closest_prey[2]
+            dist = math.sqrt(dx**2 + dy**2)
             
             if dist > 0:  # 检查距离是否为零
                 move_vector[0] += (dx / dist) * constants.PREDATOR_ACCELERATION_FACTOR
@@ -59,13 +67,14 @@ class Predator(Creature):
 
         elif observed_food:
             # 靠近食物
-            dx = observed_food.rect.x - self.rect.x
-            dy = observed_food.rect.y - self.rect.y
-            dist = self.distance_to(observed_food)
+            closest_food = min(observed_food, key=lambda food: math.sqrt(food[1]**2 + food[2]**2))
+            dx = closest_food[1]
+            dy = closest_food[2]
+            dist = math.sqrt(dx**2 + dy**2)
             if dist > 0:  # 检查距离是否为零
                 move_vector[0] += dx / dist
                 move_vector[1] += dy / dist
-        
+
         else:
             # 停下来并旋转观察周围
             if random.random() < constants.PREDATOR_ROTATION_CHANCE:
@@ -77,12 +86,13 @@ class Predator(Creature):
                 move_vector[1] = 0
 
         # 利用听觉信息来影响移动策略
-        for sound_intensity, sound_direction in heard_sounds:
+        for sound in sounds:
+            sound_intensity = sound[1]
+            sound_direction = sound[2]
             move_vector[0] += sound_intensity * math.cos(sound_direction)
             move_vector[1] += sound_intensity * math.sin(sound_direction)
 
         return move_vector
-
     def hunt_prey(self, prey_list):
         for prey in prey_list:
             if self.rect.colliderect(prey.rect):

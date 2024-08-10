@@ -18,6 +18,7 @@ class Simulator:
         self.selected_agent = None
         self.dead_predator_count = 0  # 新增变量记录死亡的捕食者数量
         self.food_generation_timer = 0  # 初始化食物生成计时器
+        self.iteration_count = 0
 
     def initialize(self):
         self.initialize_obstacles()
@@ -76,8 +77,8 @@ class Simulator:
 
     def generate_food(self):
         while True:
-            x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - constants.FOOD_SIZE)
-            y = random.randint(0, self.screen_height - constants.FOOD_SIZE)
+            x = random.randint(constants.CENTER_AREA_X_START, constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE)
+            y = random.randint(constants.CENTER_AREA_Y_START, constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE)
             new_food = Food(x, y, constants.FOOD_SIZE)
             if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles):
                 self.foods.append(new_food)
@@ -141,13 +142,48 @@ class Simulator:
             agent.rect.x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - agent.rect.width)
             agent.rect.y = random.randint(0, self.screen_height - agent.rect.height)
 
-    def add_food(self, delta_time):
-        self.food_generation_timer += delta_time
-        if self.food_generation_timer >= constants.FOOD_GENERATION_INTERVAL:
-            self.food_generation_timer = 0
-            current_food_count = len(self.foods)
-            if current_food_count < constants.NUM_FOOD:
-                self.spawn_food(constants.NUM_FOOD - current_food_count)
+    def add_food(self):
+        self.iteration_count += 1
+        if self.iteration_count % constants.FOOD_GENERATION_INTERVAL == 0:
+            self.generate_random_food()
+            self.generate_food_near_existing()
+
+    def generate_random_food(self):
+        num_random_foods = int(constants.MAX_FOOD_COUNT * constants.RANDOM_FOOD_PROPORTION)
+        new_foods = []
+        while len(new_foods) < num_random_foods:
+            x = random.randint(constants.CENTER_AREA_X_START,constants.CENTER_AREA_X_START+constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE)
+            y = random.randint(constants.CENTER_AREA_Y_START, constants.CENTER_AREA_Y_START+constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE)
+            new_food = Food(x, y, constants.FOOD_SIZE)
+            if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
+            not any(new_food.rect.colliderect(f.rect) for f in self.foods):
+                new_foods.append(new_food)
+        self.foods.extend(new_foods)
+        
+    def generate_food_near_existing(self):
+        directions = [(constants.FOOD_SPAWN_DISTANCE, 0), (-constants.FOOD_SPAWN_DISTANCE, 0),
+                    (0, constants.FOOD_SPAWN_DISTANCE), (0, -constants.FOOD_SPAWN_DISTANCE)]
+        
+        if len(self.foods) >= constants.MAX_FOOD_COUNT:
+            return
+
+        new_foods = []
+        for food in self.foods:
+            for dx, dy in directions:
+                x = food.rect.x + dx
+                y = food.rect.y + dy
+                if constants.CENTER_AREA_X_START <= x <= constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE and \
+                constants.CENTER_AREA_Y_START <= y <= constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE:
+                    new_food = Food(x, y, constants.FOOD_SIZE)
+                    if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
+                    not any(new_food.rect.colliderect(f.rect) for f in self.foods):
+                        new_foods.append(new_food)
+                        if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
+                            break
+            if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
+                break
+
+        self.foods.extend(new_foods)
 
     def check_events(self):
         pass
@@ -155,6 +191,24 @@ class Simulator:
     def remove_dead(self):
         self.predators = [p for p in self.predators if p.health > 0]
         self.prey = [p for p in self.prey if p.health > 0]
+    def obs_env(self):
+        for predator in self.predators:
+            predator.set_prey_list(self.prey)
+            predator.env_predators = self.predators
+            predator.env_prey = self.prey
+            predator.env_food = self.foods
+            predator.env_obstacles = self.obstacles
+            self.move_predator(predator)
+            predator.increment_iteration()  # 增加迭代计数器
+
+        for prey in self.prey:
+            prey.env_predators = self.predators
+            prey.env_prey = self.prey
+            prey.env_food = self.foods
+            prey.env_obstacles = self.obstacles
+            self.move_prey(prey)
+            prey.increment_iteration()  # 增加迭代计数器
+
 
     def move_models(self):
         for predator in self.predators:
@@ -175,9 +229,11 @@ class Simulator:
             prey.increment_iteration()  # 增加迭代计数器
 
     def move_prey(self, prey):
+
         prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
 
     def move_predator(self, predator):
+        
         predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
 
     def draw_models(self, screen):
@@ -213,7 +269,11 @@ class Simulator:
     def predator_hunt(self):
         for predator in self.predators:
             predator.hunt_prey(self.prey)
-
+            
+    def remove_food(self, food):
+        if food in self.foods:
+            self.foods.remove(food)
+                
     def decrease_health(self):
         self.update_health()
         self.remove_dead()
