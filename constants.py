@@ -30,7 +30,7 @@ MAIN_MENU = 0
 IN_GAME = 1
 
 # 小方块属性
-NUM_PREDATORS = 0  # 捕食者初始数量
+NUM_PREDATORS = 10  # 捕食者初始数量
 NUM_PREY = 20 # 猎物初始数量
 BLOCK_SIZE = 30
 

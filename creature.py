@@ -38,14 +38,15 @@ class Creature(ABC):
     def draw_hearing_range(self, screen):
         pygame.draw.circle(screen, (128, 128, 128), self.rect.center, self.hearing_range, 1)  # 画出听觉范围
 
-    def highlight_targets(self, screen, observed_predator, observed_prey, observed_food, observed_obstacle):
-        if observed_predator:
+    def highlight_targets(self, screen, observed_predators, observed_preys, observed_foods, observed_obstacles):
+        print(observed_preys)
+        for observed_predator in observed_predators:
             observed_predator.color = (255, 255, 0)  # 高亮捕食者
-        if observed_prey:
+        for observed_prey in observed_preys:
             observed_prey.color = (0, 0, 255)  # 高亮猎物
-        if observed_food:
+        for observed_food in observed_foods:
             observed_food.color = (255, 0, 0)  # 高亮食物
-        if observed_obstacle:
+        for observed_obstacle in observed_obstacles:
             pygame.draw.rect(screen, (255, 255, 255), observed_obstacle.rect, 2)  # 高亮障碍物框架
 
     def reset_color(self):

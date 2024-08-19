@@ -23,16 +23,16 @@ class Prey(Creature):
             self.draw_hearing_range(screen)
 
             # 获取感知信息矩阵
-            other_data, _ = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+            other_data = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
             
-            # 解析矩阵，分别处理视距内的捕食者、猎物、食物和障碍物
-            observed_predator = [item for item in other_data if item[0] == 1]  # 捕食者
-            observed_prey = [item for item in other_data if item[0] == 2]  # 猎物
-            observed_food = [item for item in other_data if item[0] == 3]  # 食物
-            observed_obstacle = [item for item in other_data if item[0] == 4]  # 障碍物
+            # # 解析矩阵，分别处理视距内的捕食者、猎物、食物和障碍物
+            # observed_predator = [item for item in other_data if item[0] == 1]  # 捕食者
+            # observed_prey = [item for item in other_data if item[0] == 2]  # 猎物
+            # observed_food = [item for item in other_data if item[0] == 3]  # 食物
+            # observed_obstacle = [item for item in other_data if item[0] == 4]  # 障碍物
             
-            # 选中时高亮目标
-            self.highlight_targets(screen, observed_predator, observed_prey, observed_food, observed_obstacle)
+            # # 选中时高亮目标
+            # self.highlight_targets(screen, observed_predator, observed_prey, observed_food, observed_obstacle)
 
     def get_observe_info(self):
         ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)

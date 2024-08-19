@@ -116,7 +116,10 @@ while iteration_count<10000000:
                     fps = constants.SLOW_FPS if fps == constants.DEFAULT_FPS else constants.DEFAULT_FPS
                 else:
                     selected_agent = sim.get_agent_info(event.pos)
-                    print(selected_agent.name)
+                    if selected_agent is not None:
+                        print(selected_agent.name)
+                    else:
+                        print("No agent selected.")
                     if selected_agent:
                         selected_agent.selected = True
                         for agent in sim.predators + sim.preys:
