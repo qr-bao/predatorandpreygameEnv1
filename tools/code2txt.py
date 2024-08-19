@@ -6,6 +6,7 @@ def collect_py_files_to_txt(parent_dir, output_file):
             for file in files:
                 if file.endswith('.py'):
                     file_path = os.path.join(root, file)
+                    # print(file_path)
                     with open(file_path, 'r') as infile:
                         outfile.write(f'# File: {file_path}\n')
                         outfile.write(infile.read())

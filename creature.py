@@ -21,6 +21,8 @@ class Creature(ABC):
         self.hearing_range = hearing_range  # 听觉范围
         self.selected = False  # 新增的
         self.iteration_counter = 0  # 新增的迭代计数器
+        self.is_alive = True
+        
     
     def increment_iteration(self):
         self.iteration_counter += 1
@@ -59,7 +61,7 @@ class Creature(ABC):
         original_position = self.rect.topleft
 
         # 子类具体实现移动策略
-        self.move_strategy()
+        # self.move_strategy()
 
         # 碰撞检测，防止小方块移出游戏空间
         if self.rect.left < control_panel_width or self.rect.right > screen_width:
@@ -268,8 +270,8 @@ class Creature(ABC):
         observed_obstacle = find_first_visible(env_obstacles, env_obstacles, 4)
 
         # 汇总所有视觉信息
-        other_data = observed_predator + observed_prey + observed_food + observed_obstacle
-        other_data = process_matrix(other_data)
+        other_data = process_matrix(observed_predator) + process_matrix(observed_prey) + process_matrix(observed_food) + process_matrix(observed_obstacle)
+        # other_data = process_matrix(other_data)
         # 收集听觉信息
         heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
         sounds = [
@@ -280,7 +282,9 @@ class Creature(ABC):
         # print(np.shape(other_data),np.shape(sounds),np.shape(other_data+sounds))
         ob_env = other_data+sounds
         # print(np.shape(other_data),np.shape(sounds))
-        print(np.shape(ob_env))
+        # print(np.shape(ob_env))
+
+
         return np.array(ob_env)
         # return np.array(other_data), np.array(sounds)
 
@@ -319,11 +323,12 @@ class Creature(ABC):
         self.health -= self.health_decay
         if self.health <= 0:
             self.health = 0
+            self.is_alive = False
         elif self.health > self.max_health:
             self.health = self.max_health
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect)
 
-    def is_dead(self):
-        return self.health <= 0
+    # def is_dead(self):
+    #     return self.health <= 0

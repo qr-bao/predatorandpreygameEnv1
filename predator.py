@@ -3,10 +3,12 @@ from creature import Creature
 import constants
 import random
 class Predator(Creature):
-    def __init__(self, x, y, size):
-        super().__init__(x, y, size, (255, 0, 0), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
+    def __init__(self, x, y, size,name="pred",algorithm = "initalrandom"):
+        super().__init__(x, y, size, (0,0,0), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
         self.sight_range = constants.PREDATOR_SIGHT_RANGE  # 使用新的视觉范围
         self.prey_list = []
+        self.name = name
+        self.algorithm = algorithm
 
     def draw(self, screen):
         self.reset_color()  # 重置颜色
@@ -23,11 +25,11 @@ class Predator(Creature):
         ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
         return ob_env
 
-    def move_strategy(self):
+    def move_strategy(self,move_vector):
         Creature.reset_all_colors(self.env_predators + self.env_prey)
         ob_env = self.get_observe_info()
         # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
-        move_vector = self.get_target(ob_env)
+        move_vector = move_vector
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
@@ -103,11 +105,11 @@ class Predator(Creature):
                 prey_list.remove(prey)
                 return
 
-    def crossbreed(self, other):
+    def crossbreed(self, other,next_pred_id):
         child_x = (self.rect.x + other.rect.x) // 2
         child_y = (self.rect.y + other.rect.y) // 2
-        child_size = constants.BLOCK_SIZE
-        child = Predator(child_x, child_y, child_size)
+        name = f"Pred{self.algorithm}_{next_pred_id}"  # 使用全局唯一ID生成名称
+        child = Predator(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=self.algorithm)
         return child
 
     def mutate(self):
@@ -125,7 +127,6 @@ class Predator(Creature):
         
         # 根据加速度计算额外的健康值减少
         health_decay += acceleration * constants.PREDATOR_ACCELERATION_HEALTH_DECAY_FACTOR
-
         self.health -= health_decay
 
         if self.health <= 0:

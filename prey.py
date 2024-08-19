@@ -5,11 +5,16 @@ from creature import Creature
 import constants
 import numpy as np
 class Prey(Creature):
-    def __init__(self, x, y, size):
-        super().__init__(x, y, size, (0, 255, 0), constants.PREY_INITIAL_HEALTH, constants.PREY_MAX_HEALTH, constants.PREY_HEALTH_DECAY, constants.PREY_HEARING_RANGE)
+    def __init__(self, x, y, size,name="prey",algorithm = "initalrandom"):
+        super().__init__(x, y, size, (255, 165, 0), constants.PREY_INITIAL_HEALTH, constants.PREY_MAX_HEALTH, constants.PREY_HEALTH_DECAY, constants.PREY_HEARING_RANGE)
         self.sight_range = constants.PREY_SIGHT_RANGE  # 使用新的视觉范围
         self.turn_counter = 0  # 用于记录逃跑时的计时器
-
+        self.name = name
+        self.algorithm = algorithm
+        self.log()
+    def log(self):
+        print(self.name,end="    ")
+        print(self.algorithm)
     def draw(self, screen):
         self.reset_color()  # 重置颜色
         super().draw(screen)
@@ -29,13 +34,16 @@ class Prey(Creature):
             # 选中时高亮目标
             self.highlight_targets(screen, observed_predator, observed_prey, observed_food, observed_obstacle)
 
-
-    def move_strategy(self,ob_env1=[]):
-        Creature.reset_all_colors(self.env_predators + self.env_prey)
+    def get_observe_info(self):
         ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        # print(ob_env)
+        return ob_env
+    def move_strategy(self,move_vector):
+        Creature.reset_all_colors(self.env_predators + self.env_prey)
+        # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
         
         
-        move_vector = self.get_target(ob_env)
+        # move_vector = self.get_target(ob_env)
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
@@ -149,11 +157,12 @@ class Prey(Creature):
                 return
 
 
-    def crossbreed(self, other):
+    def crossbreed(self, other,next_prey_id):
         child_x = (self.rect.x + other.rect.x) // 2
         child_y = (self.rect.y + other.rect.y) // 2
-        child_size = constants.BLOCK_SIZE
-        child = Prey(child_x, child_y, child_size)
+        name = f"Prey{self.algorithm}_{next_prey_id}"  # 使用全局唯一ID生成名称
+        child = Prey(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=self.algorithm)
+
         return child
 
     def mutate(self):
