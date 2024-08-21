@@ -3,10 +3,10 @@ import gym
 from gym import spaces
 import pygame
 import numpy as np
+import random
 from simulator import Simulator
 import constants
 from torchrl.envs.utils import check_env_specs
-from gym.utils.env_checker import check_env
 from gym.utils.env_checker import check_env
 from gym.envs.registration import register
 
@@ -29,12 +29,12 @@ class PredatorPreyEnv(gym.Env):
         max_range = max(600, 1000)
         num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
         new_shape = (num_entities, 25, 3)
-        obs_low = np.full(new_shape, -np.inf, dtype=np.float32) #inf maybe not the best choice , let us decide later
-        obs_high = np.full(new_shape, np.inf, dtype=np.float32)
+        obs_low = np.full(new_shape, -max_range, dtype=np.float32) #inf maybe not the best choice , let us decide later
+        obs_high = np.full(new_shape, max_range, dtype=np.float32)
         action_shape = (num_entities,2)
         action_speed_range = max(constants.PREY_MAX_SPEED,constants.PREY_MAX_SPEED)
-        action_low = np.full(action_shape, -np.inf, dtype=np.float32)
-        action_high = np.full(action_shape, np.inf, dtype=np.float32)
+        action_low = np.full(action_shape, -action_speed_range, dtype=np.float32)
+        action_high = np.full(action_shape, action_speed_range, dtype=np.float32)
         # obs_low = np.array([0, 0, 0] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
         # obs_high = np.array([max_range, max_range, max_range] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
         # self.observation_space_shape = (constants.NUM_PREDATORS+constants.NUM_PREY) * 3 * 25
@@ -71,6 +71,7 @@ class PredatorPreyEnv(gym.Env):
         self.group_map.clear()
         if seed is not None:
             np.random.seed(seed)
+            random.seed(seed)
         allalgorithms= self.reset_algorithm()
         all_pred_algorithms, all_prey_algorithms = allalgorithms[:constants.NUM_PREDATORS],allalgorithms[constants.NUM_PREDATORS:]
         self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
@@ -268,6 +269,13 @@ class PredatorPreyEnv(gym.Env):
     def close(self):
         # 关闭环境
         pass
+
+register(
+    id='PredatorPreyEnv-v0',
+    entry_point='2gym:PredatorPreyEnv',
+)
+
+
 def generate_random_actions(num_agents, action_space):
     actions = []
     for _ in range(num_agents):
@@ -275,10 +283,10 @@ def generate_random_actions(num_agents, action_space):
         # print(action)
         actions.append(action)
     return actions
-register(
-    id='PredatorPreyEnv-v0',
-    entry_point='2gym:PredatorPreyEnv',
-)
+
+
+
+
 
 
 
@@ -313,9 +321,9 @@ def apply_algorithms_to_agents(agents, algorithms):
     for agent, algorithm in zip(agents, algorithms):
         agent.algorithm = algorithm  # 将算法分配给智能体
 
-def run_random_simulation():
+def run_random_simulation(env):
     
-    env = PredatorPreyEnv()
+    # env = PredatorPreyEnv()
     observations,infos = env.reset()
     obs = observations
     # print("Returned Observation:", obs)
@@ -329,7 +337,7 @@ def run_random_simulation():
     # print(np.shape(env.observation_space))
     # check_env_specs(env)
 
-    check_env(env)
+    # check_env(env)
     # rollout = env.rollout(10)
     # print(f"rollout of {10} steps:", rollout)
     # print("Shape of the rollout TensorDict:", rollout.batch_size)
@@ -367,5 +375,7 @@ def run_random_simulation():
 if __name__ == "__main__":
 
     env = gym.make('PredatorPreyEnv-v0')
-    run_random_simulation()
-    # check_env(env)
+    check_env(env.unwrapped)
+    check_env(env)
+
+    run_random_simulation(env)

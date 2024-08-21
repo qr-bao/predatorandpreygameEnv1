@@ -9,10 +9,10 @@ class Predator(Creature):
         self.prey_list = []
         self.name = name
         self.algorithm = algorithm
-        self.log()
-    def log(self):
-        print(self.name,end="    ")
-        print(self.algorithm)
+    #     self.log()
+    # def log(self):
+    #     print(self.name,end="    ")
+    #     print(self.algorithm)
 
     def draw(self, screen):
         self.reset_color()  # 重置颜色
