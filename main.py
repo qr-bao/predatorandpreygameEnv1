@@ -202,7 +202,7 @@ while iteration_count<10000000:
                 f"Velocity ({selected_agent.velocity[0]}, {selected_agent.velocity[1]}), "
                 f"Health ({selected_agent.health})"
             )
-            info_surface = font.render(agent_info, True, (255, 255, 255))
+            info_surface = font.render(agent_info, True, (0, 0, 0))
             screen.blit(info_surface, (50, screen_height - 100))
 
     pygame.display.flip()

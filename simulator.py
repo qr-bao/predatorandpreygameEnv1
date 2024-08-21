@@ -26,6 +26,10 @@ class Simulator:
         self.initialize_agents(predAlgorithms =all_pred_algorithms,preyAlgorithms = all_prey_algorithms)
         self.initialize_food()
         self.food_generation_timer = 0  # 重置计时器
+        self.dead_predator_count = 0  # 新增变量记录死亡的捕食者数量
+        self.food_iteration_count = 0
+        self.next_predator_id = 1  # 用于生成唯一的捕食者名称
+        self.next_prey_id = 1  # 用于生成唯一的猎物名称
 
     def initialize_obstacles(self):
         self.obstacles = []
@@ -63,7 +67,7 @@ class Simulator:
         while True:
             x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - constants.BLOCK_SIZE)
             y = random.randint(0, self.screen_height - constants.BLOCK_SIZE)
-            name = f"Pred{algorithm}_{self.next_prey_id}"  # 使用全局唯一ID生成名称
+            name = f"Prey{algorithm}_{self.next_prey_id}"  # 使用全局唯一ID生成名称
             new_prey = Prey(x, y, constants.BLOCK_SIZE,name=name,algorithm=algorithm)
 
             if not any(new_prey.rect.colliderect(obs.rect) for obs in self.obstacles):
@@ -256,7 +260,7 @@ class Simulator:
         predator.health += prey.health * constants.PREDATOR_HEALTH_GAIN_FACTOR
 
         if predator.health > predator.max_health:
-            predator.health = predator.max_healt
+            predator.health = predator.max_health
 
         # 移除猎物
         prey.is_alive = False

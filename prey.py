@@ -11,10 +11,10 @@ class Prey(Creature):
         self.turn_counter = 0  # 用于记录逃跑时的计时器
         self.name = name
         self.algorithm = algorithm
-        self.log()
-    def log(self):
-        print(self.name,end="    ")
-        print(self.algorithm)
+    #     self.log()
+    # def log(self):
+    #     print(self.name,end="    ")
+    #     print(self.algorithm)
     def draw(self, screen):
         self.reset_color()  # 重置颜色
         super().draw(screen)

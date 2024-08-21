@@ -9,6 +9,10 @@ class Predator(Creature):
         self.prey_list = []
         self.name = name
         self.algorithm = algorithm
+        self.log()
+    def log(self):
+        print(self.name,end="    ")
+        print(self.algorithm)
 
     def draw(self, screen):
         self.reset_color()  # 重置颜色
@@ -33,7 +37,7 @@ class Predator(Creature):
 
     def move_strategy(self,move_vector):
         Creature.reset_all_colors(self.env_predators + self.env_prey)
-        ob_env = self.get_observe_info()
+        # ob_env = self.get_observe_info()
         # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
         move_vector = move_vector
 
@@ -124,7 +128,7 @@ class Predator(Creature):
 
     def update_health(self):
         # 基础的健康值减少
-        health_decay = self.health_decay * 2  # 将捕食者的生命值减少速度设置为猎物的两倍
+        health_decay = self.health_decay   # 将捕食者的生命值减少速度设置为猎物的两倍
 
         # 根据速度变化计算加速度
         accel_x = self.velocity[0] - self.previous_velocity[0]
@@ -137,5 +141,6 @@ class Predator(Creature):
 
         if self.health <= 0:
             self.health = 0
+            self.is_alive = False
         elif self.health > self.max_health:
             self.health = self.max_health
