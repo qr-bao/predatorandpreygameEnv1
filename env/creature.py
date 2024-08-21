@@ -2,7 +2,7 @@
 import pygame
 import random
 import math
-import constants
+import env.constants as constants
 from abc import ABC, abstractmethod
 import numpy as np
 class Creature(ABC):
@@ -39,7 +39,7 @@ class Creature(ABC):
         pygame.draw.circle(screen, (128, 128, 128), self.rect.center, self.hearing_range, 1)  # 画出听觉范围
 
     def highlight_targets(self, screen, observed_predators, observed_preys, observed_foods, observed_obstacles):
-        print(observed_preys)
+        # print(observed_preys)
         for observed_predator in observed_predators:
             observed_predator.color = (255, 255, 0)  # 高亮捕食者
         for observed_prey in observed_preys:
@@ -64,12 +64,25 @@ class Creature(ABC):
         # 子类具体实现移动策略
         # self.move_strategy()
 
+        # # 碰撞检测，防止小方块移出游戏空间
+        # if self.rect.left < control_panel_width or self.rect.right > screen_width:
+        #     self.velocity[0] = -self.velocity[0]
+        # if self.rect.top < 0 or self.rect.bottom > screen_height:
+        #     self.velocity[1] = -self.velocity[1]
         # 碰撞检测，防止小方块移出游戏空间
-        if self.rect.left < control_panel_width or self.rect.right > screen_width:
+        if self.rect.left < control_panel_width:
+            self.rect.left = control_panel_width
             self.velocity[0] = -self.velocity[0]
-        if self.rect.top < 0 or self.rect.bottom > screen_height:
-            self.velocity[1] = -self.velocity[1]
+        elif self.rect.right > screen_width:
+            self.rect.right = screen_width
+            self.velocity[0] = -self.velocity[0]
 
+        if self.rect.top < 0:
+            self.rect.top = 0
+            self.velocity[1] = -self.velocity[1]
+        elif self.rect.bottom > screen_height:
+            self.rect.bottom = screen_height
+            self.velocity[1] = -self.velocity[1]
         # 检查是否与障碍物碰撞
         if any(self.rect.colliderect(obs.rect) for obs in obstacles):
             # 如果碰撞，恢复到原始位置并反转速度

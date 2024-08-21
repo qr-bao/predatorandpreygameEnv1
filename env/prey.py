@@ -1,8 +1,8 @@
 # prey.py
 import random
 import math
-from creature import Creature
-import constants
+from env.creature import Creature
+import env.constants as constants
 import numpy as np
 class Prey(Creature):
     def __init__(self, x, y, size,name="prey",algorithm = "initalrandom"):

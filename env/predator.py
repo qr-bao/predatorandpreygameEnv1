@@ -1,10 +1,10 @@
 import math
-from creature import Creature
-import constants
+from env.creature import Creature
+import env.constants as constants
 import random
 class Predator(Creature):
     def __init__(self, x, y, size,name="pred",algorithm = "initalrandom"):
-        super().__init__(x, y, size, (0,0,0), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
+        super().__init__(x, y, size, (128,128,128), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
         self.sight_range = constants.PREDATOR_SIGHT_RANGE  # 使用新的视觉范围
         self.prey_list = []
         self.name = name

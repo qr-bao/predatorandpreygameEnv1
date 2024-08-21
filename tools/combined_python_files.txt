@@ -2412,3 +2412,238 @@ class Food:
         pygame.draw.rect(screen, self.color, self.rect)
 
 
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch12/tools/code2txt.py
+
+import os
+
+def collect_py_files_to_txt(parent_dir, output_file):
+    with open(output_file, 'w') as outfile:
+        for root, dirs, files in os.walk(parent_dir):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    # print(file_path)
+                    with open(file_path, 'r') as infile:
+                        outfile.write(f'# File: {file_path}\n')
+                        outfile.write(infile.read())
+                        outfile.write('\n\n')
+
+if __name__ == "__main__":
+    parent_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))  # 获取上一层文件夹路径
+    output_file = os.path.join(os.getcwd(), 'all_python_files3.txt')  # 输出文件路径
+
+    collect_py_files_to_txt(parent_dir, output_file)
+    print(f'所有的 .py 文件已整合到 {output_file}')
+
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch12/tools/code3txt.py
+
+
+import os
+
+def combine_python_files_to_txt():
+    # 获取当前脚本文件夹的上一级文件夹路径
+    parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    
+    # 输出文件路径
+    output_file = os.path.join(os.path.dirname(__file__), "combined_python_files.txt")
+    
+    # 打开输出文件（如果文件已存在，则覆盖；如果不存在，则新建）
+    with open(output_file, 'w', encoding='utf-8') as outfile:
+        # 遍历上一级文件夹中的所有文件
+        for filename in os.listdir(parent_dir):
+            # 构建文件路径
+            file_path = os.path.join(parent_dir, filename)
+            # 检查文件是否为 .py 文件并且是否是文件而不是目录
+            if filename.endswith('.py') and os.path.isfile(file_path):
+                with open(file_path, 'r', encoding='utf-8') as infile:
+                    # 写入文件名作为注释
+                    outfile.write(f"# {filename}\n")
+                    # 读取 .py 文件内容并写入到输出文件中
+                    outfile.write(infile.read())
+                    # 每个文件内容之间添加两个换行符
+                    outfile.write("\n\n")
+    
+    print(f"All .py files from {parent_dir} have been combined into {output_file}")
+
+if __name__ == "__main__":
+    combine_python_files_to_txt()
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch12/tools/code4txt.py
+
+import os
+
+# 定义文件夹路径
+parent_folder = os.path.dirname(os.path.abspath(__file__))  # 当前父文件夹
+env_folder = os.path.join(parent_folder, 'env')  # env 文件夹路径
+
+# 定义要生成的文本文件路径
+output_file = os.path.join(parent_folder, 'combined_python_files.txt')
+
+# 函数用于读取文件内容并写入到目标文件中
+def append_file_content(file_path, output):
+    with open(file_path, 'r') as f:
+        content = f.read()
+    with open(output, 'a') as f:
+        f.write(f'\n\n# File: {file_path}\n\n')
+        f.write(content)
+
+# 获取父文件夹中的所有Python文件，并将内容写入目标文件
+for root, _, files in os.walk(parent_folder):
+    if root == env_folder:  # 跳过env文件夹
+        continue
+    for file in files:
+        if file.endswith('.py'):
+            append_file_content(os.path.join(root, file), output_file)
+
+# 获取env文件夹中的所有Python文件，并将内容写入目标文件
+for root, _, files in os.walk(env_folder):
+    for file in files:
+        if file.endswith('.py'):
+            append_file_content(os.path.join(root, file), output_file)
+
+print(f"所有Python文件的内容已成功粘贴到 {output_file} 中。")
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch12/tools/narry_precess.py
+
+# import numpy as np
+
+# def process_matrix(matrix, target_shape=(5, 3)):
+#     """
+#     裁剪或填充矩阵，使其保持 target_shape 的大小。
+
+#     参数:
+#     - matrix: 输入的矩阵，形状为 (N, 3)
+#     - target_shape: 目标形状，默认为 (5, 3)
+
+#     返回:
+#     - 处理后的矩阵，形状为 target_shape
+#     """
+#     current_shape = matrix.shape
+
+#     # 确保输入矩阵的列数正确
+#     assert current_shape[1] == target_shape[1], f"输入矩阵的列数应为 {target_shape[1]}，但得到了 {current_shape[1]}"
+
+#     # 如果当前矩阵行数大于目标行数，则进行裁剪
+#     if current_shape[0] > target_shape[0]:
+#         processed_matrix = matrix[:target_shape[0], :]
+#     # 如果当前矩阵行数小于目标行数，则进行填充
+#     elif current_shape[0] < target_shape[0]:
+#         padding_rows = target_shape[0] - current_shape[0]
+#         padding = np.zeros((padding_rows, target_shape[1]))
+#         processed_matrix = np.vstack((matrix, padding))
+#     else:
+#         processed_matrix = matrix
+
+#     return processed_matrix
+
+# # 示例使用
+# input_matrix = np.array([
+#     [1, 2, 3],
+#     [4, 5, 6],
+#     [7, 8, 9],
+#     [10, 11, 12],
+#     [13, 14, 15],
+#     [16, 17, 18]
+# ])
+
+# processed_matrix = process_matrix(input_matrix)
+# print(processed_matrix)
+
+
+def process_matrix(matrix, target_shape=(5, 3)):
+    """
+    裁剪或填充矩阵，使其保持 target_shape 的大小。
+
+    参数:
+    - matrix: 输入的矩阵，形状为 (N, 3)
+    - target_shape: 目标形状，默认为 (5, 3)
+
+    返回:
+    - 处理后的矩阵，形状为 target_shape
+    """
+    if not matrix:
+        # 如果矩阵为空，直接填充目标大小的零矩阵
+        return [[0] * target_shape[1] for _ in range(target_shape[0])]
+    current_rows = len(matrix)
+    current_cols = len(matrix[0]) if current_rows > 0 else 0
+
+    # 确保输入矩阵的列数正确
+    assert current_cols == target_shape[1], f"输入矩阵的列数应为 {target_shape[1]}，但得到了 {current_cols}"
+
+    # 如果当前矩阵行数大于目标行数，则进行裁剪
+    if current_rows > target_shape[0]:
+        processed_matrix = matrix[:target_shape[0]]
+    # 如果当前矩阵行数小于目标行数，则进行填充
+    elif current_rows < target_shape[0]:
+        processed_matrix = matrix[:]
+        padding_rows = target_shape[0] - current_rows
+        padding = [[0] * target_shape[1]] * padding_rows
+        processed_matrix.extend(padding)
+    else:
+        processed_matrix = matrix
+
+    return processed_matrix
+
+matrix = []
+print(process_matrix(matrix))
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch12/tools/test.py
+
+import gym
+from gym import spaces
+import numpy as np
+
+class CustomEnv(gym.Env):
+    def __init__(self):
+        super(CustomEnv, self).__init__()
+
+        # 定义动作空间和观察空间
+        self.action_space = spaces.Discrete(2)  # 0表示向左，1表示向右
+        self.observation_space = spaces.Box(low=np.array([0]), high=np.array([100]), dtype=np.float32)
+
+        # 初始化小车位置
+        self.position = 0
+
+    def reset(self):
+        # 重置环境，将小车放置在起始位置
+        self.position = 0
+        return np.array([self.position])
+
+    def step(self, action):
+        # 执行动作，更新小车位置并返回奖励和观察结果
+        if action == 0:
+            self.position -= 1
+        else:
+            self.position += 1
+
+        # 计算奖励
+        reward = 1 if action == 1 else -1
+
+        # 规定位置范围在 [0, 100] 之间
+        self.position = np.clip(self.position, 0, 100)
+
+        # 返回观察结果、奖励、是否终止和其他信息
+        return np.array([self.position]), reward, False, {
+   }
+
+# 创建环境实例
+env = CustomEnv()
+
+# 测试环境
+for episode in range(5):
+    state = env.reset()
+    total_reward = 0
+    done = False
+    while not done:
+        action = env.action_space.sample()  # 随机选择动作
+        next_state, reward, done, _ = env.step(action)
+        total_reward += reward
+    print(f"Episode {episode + 1}, Total Reward: {total_reward}")
+    

@@ -6,7 +6,7 @@ import pygame
 from predator import Predator
 from prey import Prey
 from food import Food
-import constants
+import env.constants as constants
 
 def spawn_predator(obstacles, screen_width, screen_height):
     while True:

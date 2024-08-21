@@ -1,5 +1,5 @@
 import pygame
-import constants
+import env.constants as constants
 
 class Food:
     def __init__(self, x, y, size):

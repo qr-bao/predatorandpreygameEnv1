@@ -1,11 +1,11 @@
 # simulator.py
 import random
 import pygame
-from predator import Predator
-from prey import Prey
-from food import Food
-from obstacle import Obstacle
-import constants
+from env.predator import Predator
+from env.prey import Prey
+from env.food import Food
+from env.obstacle import Obstacle
+import env.constants as constants
 
 class Simulator:
     def __init__(self, screen_width, screen_height):
@@ -21,6 +21,7 @@ class Simulator:
         self.food_iteration_count = 0
         self.next_predator_id = 1  # 用于生成唯一的捕食者名称
         self.next_prey_id = 1  # 用于生成唯一的猎物名称
+        self.agent_status = {}  # Dictionary to track alive status
     def initialize(self,all_pred_algorithms,all_prey_algorithms):
         self.initialize_obstacles()
         self.initialize_agents(predAlgorithms =all_pred_algorithms,preyAlgorithms = all_prey_algorithms)
@@ -30,6 +31,8 @@ class Simulator:
         self.food_iteration_count = 0
         self.next_predator_id = 1  # 用于生成唯一的捕食者名称
         self.next_prey_id = 1  # 用于生成唯一的猎物名称
+
+
 
     def initialize_obstacles(self):
         self.obstacles = []
@@ -72,6 +75,7 @@ class Simulator:
 
             if not any(new_prey.rect.colliderect(obs.rect) for obs in self.obstacles):
                 self.preys.append(new_prey)
+                self.agent_status[new_prey.name] = True  # Mark as alive
                 self.next_prey_id += 1  # 在成功生成猎物后增加ID
                 break
 
@@ -83,6 +87,7 @@ class Simulator:
             new_predator = Predator(x, y, constants.BLOCK_SIZE,name=name,algorithm=algorithm)
             if not any(new_predator.rect.colliderect(obs.rect) for obs in self.obstacles):
                 self.predators.append(new_predator)
+                self.agent_status[new_predator.name] = True  # Mark as alive
                 self.next_predator_id += 1  # 在成功生成猎物后增加ID
                 break
 
@@ -216,6 +221,13 @@ class Simulator:
     def remove_dead(self):
         self.predators = [p for p in self.predators if p.is_alive]
         self.preys = [p for p in self.preys if p.is_alive ]
+        # Update the status of agents
+        for agent in list(self.agent_status.keys()):
+            if agent not in [p.name for p in self.predators + self.preys]:
+                self.agent_status[agent] = False
+    def is_agent_alive(self, name):
+            return self.agent_status.get(name, False)  # Return False if agent is not found
+
     # def obs_envs(self):
     #     for predator in self.predators:
     #         predator.set_prey_list(self.preys)
