@@ -7,6 +7,10 @@ from simulator import Simulator
 import constants
 from torchrl.envs.utils import check_env_specs
 from gym.utils.env_checker import check_env
+from gym.utils.env_checker import check_env
+from gym.envs.registration import register
+
+
 
 class PredatorPreyEnv(gym.Env):
     def __init__(self):
@@ -25,7 +29,7 @@ class PredatorPreyEnv(gym.Env):
         max_range = max(600, 1000)
         num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
         new_shape = (num_entities, 25, 3)
-        obs_low = np.full(new_shape, -np.inf, dtype=np.float32)
+        obs_low = np.full(new_shape, -np.inf, dtype=np.float32) #inf maybe not the best choice , let us decide later
         obs_high = np.full(new_shape, np.inf, dtype=np.float32)
         action_shape = (num_entities,2)
         action_speed_range = max(constants.PREY_MAX_SPEED,constants.PREY_MAX_SPEED)
@@ -233,26 +237,26 @@ class PredatorPreyEnv(gym.Env):
             return agent.health if agent.health > 0 else -1.0
         return 0
 
-    def render(self, mode='human'):
-        # Initialize Pygame screen if not already initialized
-        if not hasattr(self, 'screen'):
-            pygame.init()
-            if mode == 'human':
-                self.screen = pygame.display.set_mode((self.simulator.screen_width, self.simulator.screen_height))
-            elif mode == 'rgb_array':
-                self.screen = pygame.Surface((self.simulator.screen_width, self.simulator.screen_height))
+    # def render(self, mode='human'):
+    #     # Initialize Pygame screen if not already initialized
+    #     if not hasattr(self, 'screen'):
+    #         pygame.init()
+    #         if mode == 'human':
+    #             self.screen = pygame.display.set_mode((self.simulator.screen_width, self.simulator.screen_height))
+    #         elif mode == 'rgb_array':
+    #             self.screen = pygame.Surface((self.simulator.screen_width, self.simulator.screen_height))
 
-        # Fill the background with black color
-        self.screen.fill((0, 0, 0))
-        print(self.simulator.predators)
-        # Draw models onto the screen
-        self.simulator.draw_models(self.screen)
+    #     # Fill the background with black color
+    #     self.screen.fill((0, 0, 0))
+    #     print(self.simulator.predators)
+    #     # Draw models onto the screen
+    #     self.simulator.draw_models(self.screen)
 
-        # Update the display if mode is 'human'
-        if mode == 'human':
-            pygame.display.flip()
-        elif mode == 'rgb_array':
-            return self._get_rgb_array()
+    #     # Update the display if mode is 'human'
+    #     if mode == 'human':
+    #         pygame.display.flip()
+    #     elif mode == 'rgb_array':
+    #         return self._get_rgb_array()
 
     def _get_rgb_array(self):
         # Convert Pygame surface to an RGB array (numpy)
@@ -271,6 +275,14 @@ def generate_random_actions(num_agents, action_space):
         # print(action)
         actions.append(action)
     return actions
+register(
+    id='PredatorPreyEnv-v0',
+    entry_point='2gym:PredatorPreyEnv',
+)
+
+
+
+
 
 def assign_algorithms_to_agents(len_agents, algorithm_names):
     """
@@ -316,8 +328,8 @@ def run_random_simulation():
     # print(np.shape(observations),end="---")
     # print(np.shape(env.observation_space))
     # check_env_specs(env)
-    check_env(env)
 
+    check_env(env)
     # rollout = env.rollout(10)
     # print(f"rollout of {10} steps:", rollout)
     # print("Shape of the rollout TensorDict:", rollout.batch_size)
@@ -340,7 +352,7 @@ def run_random_simulation():
         iteration +=1
 
         # 渲染环境（可选）
-        env.render()
+        # env.render()
         if iteration == 10:   
               
             print(iteration)
@@ -351,5 +363,9 @@ def run_random_simulation():
             # print(f"Dones length:{len(done)}")
             # print(f"Infos: {infos}")
 
+
 if __name__ == "__main__":
+
+    env = gym.make('PredatorPreyEnv-v0')
     run_random_simulation()
+    # check_env(env)
