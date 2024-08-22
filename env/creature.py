@@ -57,55 +57,105 @@ class Creature(ABC):
         for creature in creatures:
             creature.reset_color()
 
+    # def move(self, control_panel_width, screen_width, screen_height, obstacles):
+    #     # 保存原始位置
+    #     original_position = self.rect.topleft
+
+    #     # 子类具体实现移动策略
+    #     # self.move_strategy()
+
+    #     # # 碰撞检测，防止小方块移出游戏空间
+    #     # if self.rect.left < control_panel_width or self.rect.right > screen_width:
+    #     #     self.velocity[0] = -self.velocity[0]
+    #     # if self.rect.top < 0 or self.rect.bottom > screen_height:
+    #     #     self.velocity[1] = -self.velocity[1]
+    #     # 碰撞检测，防止小方块移出游戏空间
+    #     if self.rect.left < control_panel_width:
+    #         self.rect.left = control_panel_width
+    #         self.velocity[0] = -self.velocity[0]
+    #     elif self.rect.right > screen_width:
+    #         self.rect.right = screen_width
+    #         self.velocity[0] = -self.velocity[0]
+
+    #     if self.rect.top < 0:
+    #         self.rect.top = 0
+    #         self.velocity[1] = -self.velocity[1]
+    #     elif self.rect.bottom > screen_height:
+    #         self.rect.bottom = screen_height
+    #         self.velocity[1] = -self.velocity[1]
+    #     # 检查是否与障碍物碰撞
+    #     if any(self.rect.colliderect(obs.rect) for obs in obstacles):
+    #         # 如果碰撞，恢复到原始位置并反转速度
+    #         self.rect.topleft = original_position
+    #         self.velocity[0] = -self.velocity[0]
+    #         self.velocity[1] = -self.velocity[1]
+
+
+
     def move(self, control_panel_width, screen_width, screen_height, obstacles):
         # 保存原始位置
         original_position = self.rect.topleft
+        
+        # 计算预期的新位置
+        new_position = self.rect.move(self.velocity[0], self.velocity[1])
+        
+        # 检测是否即将移出游戏空间并修正位置和速度
+        if new_position.left < control_panel_width:
+            new_position.left = control_panel_width
+            self.velocity[0] = 0  # 停止水平移动
+        elif new_position.right > screen_width:
+            new_position.right = screen_width
+            self.velocity[0] = 0
 
-        # 子类具体实现移动策略
-        # self.move_strategy()
-
-        # # 碰撞检测，防止小方块移出游戏空间
-        # if self.rect.left < control_panel_width or self.rect.right > screen_width:
-        #     self.velocity[0] = -self.velocity[0]
-        # if self.rect.top < 0 or self.rect.bottom > screen_height:
-        #     self.velocity[1] = -self.velocity[1]
-        # 碰撞检测，防止小方块移出游戏空间
-        if self.rect.left < control_panel_width:
-            self.rect.left = control_panel_width
-            self.velocity[0] = -self.velocity[0]
-        elif self.rect.right > screen_width:
-            self.rect.right = screen_width
-            self.velocity[0] = -self.velocity[0]
-
-        if self.rect.top < 0:
-            self.rect.top = 0
-            self.velocity[1] = -self.velocity[1]
-        elif self.rect.bottom > screen_height:
-            self.rect.bottom = screen_height
-            self.velocity[1] = -self.velocity[1]
+        if new_position.top < 0:
+            new_position.top = 0
+            self.velocity[1] = 0  # 停止垂直移动
+        elif new_position.bottom > screen_height:
+            new_position.bottom = screen_height
+            self.velocity[1] = 0
+        
+        # 更新位置
+        self.rect = new_position
+        
         # 检查是否与障碍物碰撞
-        if any(self.rect.colliderect(obs.rect) for obs in obstacles):
-            # 如果碰撞，恢复到原始位置并反转速度
-            self.rect.topleft = original_position
-            self.velocity[0] = -self.velocity[0]
-            self.velocity[1] = -self.velocity[1]
-        def to_relative_coordinates(target):
-            # 计算相对于agent的dx, dy
-            dx = target.rect.centerx - self.rect.centerx
-            dy = target.rect.centery - self.rect.centery
-            
-            # 计算相对角度，将北方向（y轴正方向）对齐到agent的移动方向
-            relative_angle = math.atan2(dy, dx) - math.atan2(self.velocity[1], self.velocity[0])
-            
-            # 将角度标准化到[-pi, pi]
-            relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
-            
-            # 将相对坐标转换到agent的参考系
-            distance = math.sqrt(dx**2 + dy**2)
-            relative_x = distance * math.sin(relative_angle)
-            relative_y = distance * math.cos(relative_angle)
-            
-            return relative_x, relative_y
+        for obs in obstacles:
+            if self.rect.colliderect(obs.rect):
+                # 碰撞处理：计算滑动矢量
+                overlap_x = min(self.rect.right - obs.rect.left, obs.rect.right - self.rect.left)
+                overlap_y = min(self.rect.bottom - obs.rect.top, obs.rect.bottom - self.rect.top)
+                
+                if overlap_x < overlap_y:
+                    # 水平碰撞：沿障碍物的表面滑动
+                    if self.velocity[0] > 0:
+                        self.rect.right = obs.rect.left
+                    else:
+                        self.rect.left = obs.rect.right
+                    self.velocity[0] = 0  # 停止水平移动
+                else:
+                    # 垂直碰撞：沿障碍物的表面滑动
+                    if self.velocity[1] > 0:
+                        self.rect.bottom = obs.rect.top
+                    else:
+                        self.rect.top = obs.rect.bottom
+                    self.velocity[1] = 0  # 停止垂直移动
+
+    def to_relative_coordinates(self,target):
+        # 计算相对于agent的dx, dy
+        dx = target.rect.centerx - self.rect.centerx
+        dy = target.rect.centery - self.rect.centery
+        
+        # 计算相对角度，将北方向（y轴正方向）对齐到agent的移动方向
+        relative_angle = math.atan2(dy, dx) - math.atan2(self.velocity[1], self.velocity[0])
+        
+        # 将角度标准化到[-pi, pi]
+        relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+        
+        # 将相对坐标转换到agent的参考系
+        distance = math.sqrt(dx**2 + dy**2)
+        relative_x = distance * math.sin(relative_angle)
+        relative_y = distance * math.cos(relative_angle)
+        
+        return relative_x, relative_y
     # def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
     #     def is_in_sight(target):
     #         dx = target.rect.centerx - self.rect.centerx

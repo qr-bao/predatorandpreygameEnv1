@@ -9,6 +9,8 @@ import env.constants as constants
 from torchrl.envs.utils import check_env_specs
 from gym.utils.env_checker import check_env
 from gym.envs.registration import register
+from tensordict import TensorDict
+import torch
 
 
 
@@ -89,6 +91,9 @@ class LISPredatorPreyEnv(gym.Env):
         
         obs = np.array(all_observations, dtype=np.float32) #np.shape(all_observations) = (2250,3)
         # print(np.shape(all_observations))
+        # obs = TensorDict({
+        #     'observation': torch.tensor(obs)
+        # }, batch_size=[])
         info = {}
         # print("Initial Observation:", obs)
         # assert self.observation_space.contains(obs), "Initial observation is out of bounds!"
@@ -438,7 +443,7 @@ if __name__ == "__main__":
         action = env.action_space.sample()  # 随机采样一个动作
         ew_observations, rewards, terminated, truncated, infos = env.step(action)  # 采取一步行动
         # print(f"Observation: {obs}, Reward: {rewards}, Done: {terminated}, Info: {infos}")
-        print(f"Observation: {np.shape(obs)}, Reward: {np.shape(rewards)}, Done: {np.shape(terminated)}, Info: {np.shape(infos)}")
+        print(f"Observation: {type(obs)}, Reward: {np.shape(rewards)}, Done: {np.shape(terminated)}, Info: {np.shape(infos)}")
 
         # print(np.shape(obs))
         if terminated:
