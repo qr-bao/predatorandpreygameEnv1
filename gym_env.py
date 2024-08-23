@@ -1,15 +1,21 @@
 
-import gym
-from gym import spaces
+# import gym
+import gymnasium as gym
+# from gym import spaces
+from gymnasium import spaces
 import pygame
 import numpy as np
 import random
 from env.simulator import Simulator
 import env.constants as constants
 from torchrl.envs.utils import check_env_specs
-from gym.utils.env_checker import check_env
-from gym.envs.registration import register
+# from gym.utils.env_checker import check_env
+# from gym.envs.registration import register
+from gymnasium.envs.registration import register
 from tensordict import TensorDict
+# import gym
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
 import torch
 
 
@@ -43,6 +49,8 @@ class LISPredatorPreyEnv(gym.Env):
         self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high,dtype=np.float32)
         self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
         self.interation = 0
+        self.initialnames = []
+        # self.initialdicts = {}
         # 调用 reset 方法初始化环境
         self.reset() 
 
@@ -70,6 +78,7 @@ class LISPredatorPreyEnv(gym.Env):
     def reset(self, seed=None, **kwargs):
         # 重置模拟器
         super().reset(seed=seed, **kwargs)
+        self.initialnames = []
         self.group_map.clear()
         if seed is not None:
             np.random.seed(seed)
@@ -77,6 +86,9 @@ class LISPredatorPreyEnv(gym.Env):
         allalgorithms= self.reset_algorithm()
         all_pred_algorithms, all_prey_algorithms = allalgorithms[:constants.NUM_PREDATORS],allalgorithms[constants.NUM_PREDATORS:]
         self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
+        for agent in self.simulator.preys +self.simulator.predators:
+
+            self.initialnames.append(agent.name)
         self.map_agents_to_groups(self.simulator.predators, self.simulator.preys)
         # 初始化环境信息（捕食者、猎物、食物和障碍物）
         for predator in self.simulator.predators:
@@ -99,7 +111,7 @@ class LISPredatorPreyEnv(gym.Env):
         # assert self.observation_space.contains(obs), "Initial observation is out of bounds!"
 
         # 返回一个数组，符合 observation_space 的定义
-        return obs, info
+        return obs,info
 
     def map_agents_to_groups(self,simPredators,simPreys):
         self.group_map['predators'] = [predator.name for predator in simPredators]
@@ -162,47 +174,75 @@ class LISPredatorPreyEnv(gym.Env):
     #     return new_state, rewards, dones, truncated, infos
     def step(self, actions):
         new_state, rewards, dones, infos = [], [], [], []
-        self.current_step += 1
-        truncated = self.current_step >= self.max_steps
-        # 获取所有键并转换为列表
-        keys = list(self.simulator.agent_status.keys())
-
-        # 获取从 constants.NUM_PREDATORS 开始往后 constants.NUM_PREYS 个键
-        selected_keys = keys[constants.NUM_PREDATORS:constants.NUM_PREDATORS + constants.NUM_PREY]
-
-        # 构建新的字典
-
-        # all_actions =[]
-        # all_pred_actions, all_prey_actions = actions[:constants.NUM_PREDATORS],actions[constants.NUM_PREDATORS:]
-        # 独立处理每个组的动作
-        for group_name in self.group_map.keys():
-            if group_name == "predators":
-                group_actions = actions[:constants.NUM_PREDATORS]
-                agent_status = {k: self.simulator.agent_status[k] for k in list(self.simulator.agent_status.keys())[:constants.NUM_PREDATORS]}
-            if group_name == "preys":
-                group_actions = actions[constants.NUM_PREDATORS:]
-                agent_status = {k: self.simulator.agent_status[k] for k in selected_keys}
-            
-            # 获取每个组的数据，并将其展开添加到主列表中
-            group_states, group_rewards, group_dones, group_infos = self._step_group(group_name, group_actions,agent_status)
-            new_state.extend(group_states)
-            rewards.extend(group_rewards)
-            dones.extend(group_dones)
-            infos.extend(group_infos)
-        infos = {
-            f"info_{i}": info_item for i, info_item in enumerate(infos)
-        }
-        terminated = all(dones)   
-        # 将 observations 列表转换为 numpy 数组
-        new_observations = np.array(new_state, dtype=np.float32)
-        # 调用模拟器的其他方法
+        initialdicts = dict(zip(self.initialnames, actions))
+        self.simulator.move_models(actions =initialdicts)
         self.simulator.add_food()  # 传递时间间隔
         self.simulator.prey_hunt()
         self.simulator.check_collisions()
         self.simulator.decrease_health()  # 更新健康值
         self.simulator.remove_dead()  # 清理死亡个体
 
-        return new_observations, rewards, terminated, truncated, infos
+        self.current_step += 1
+        truncated = self.current_step >= self.max_steps
+        for name in self.initialnames:
+            # 查找 B 列表中是否有 agent 的名字和 A 列表中的名字匹配
+            matching_agent = next((agent for agent in self.simulator.preys+self.simulator.predators if agent.name == name), None)
+            
+            if matching_agent and matching_agent.is_alive == True:
+                # 如果在 B 列表中找到匹配的 agent，获取其状态和奖励信息
+                new_state.append(matching_agent.get_observe_info())
+                rewards.append(self._compute_reward(matching_agent))  # 或者根据需要计算奖励
+                dones.append(False)
+                infos.append({})
+
+            else:
+                # 如果未找到匹配的 agent，说明该 agent 已死亡
+                new_state.append(np.zeros((25, 3)))
+                rewards.append(0)
+                dones.append(True)
+                infos.append({})
+
+
+        # 获取所有键并转换为列表
+        # keys = list(self.simulator.agent_status.keys())
+
+        # # 获取从 constants.NUM_PREDATORS 开始往后 constants.NUM_PREYS 个键
+        # selected_keys = keys[constants.NUM_PREDATORS:constants.NUM_PREDATORS + constants.NUM_PREY]
+
+        # # 构建新的字典
+
+        # # all_actions =[]
+        # # all_pred_actions, all_prey_actions = actions[:constants.NUM_PREDATORS],actions[constants.NUM_PREDATORS:]
+        # # 独立处理每个组的动作
+        # for group_name in self.group_map.keys():
+        #     if group_name == "predators":
+        #         group_actions = actions[:constants.NUM_PREDATORS]
+        #         agent_status = {k: self.simulator.agent_status[k] for k in list(self.simulator.agent_status.keys())[:constants.NUM_PREDATORS]}
+        #     if group_name == "preys":
+        #         group_actions = actions[constants.NUM_PREDATORS:]
+        #         agent_status = {k: self.simulator.agent_status[k] for k in selected_keys}
+            
+        #     # 获取每个组的数据，并将其展开添加到主列表中
+        #     group_states, group_rewards, group_dones, group_infos = self._step_group(group_name, group_actions,agent_status)
+        #     new_state.extend(group_states)
+        #     rewards.extend(group_rewards)
+        #     dones.extend(group_dones)
+        #     infos.extend(group_infos)
+        # infos = {
+        #     f"info_{i}": info_item for i, info_item in enumerate(infos)
+        # }
+        terminated = all(dones)   
+        # # 将 observations 列表转换为 numpy 数组
+        # new_observations = np.array(new_state, dtype=np.float32)
+        # # 调用模拟器的其他方法
+        # self.simulator.move_models()
+        # self.simulator.add_food()  # 传递时间间隔
+        # self.simulator.prey_hunt()
+        # self.simulator.check_collisions()
+        # self.simulator.decrease_health()  # 更新健康值
+        # self.simulator.remove_dead()  # 清理死亡个体
+
+        return np.array(new_state,dtype=np.float32), sum(rewards), terminated, truncated,{}
 
 
     # def _step_group(self, group_name, group_actions):
@@ -250,14 +290,36 @@ class LISPredatorPreyEnv(gym.Env):
 
         group = getattr(self.simulator, group_name)
         
-        for agent, action in zip(group, group_actions):
+        # for agent, action in zip(group, group_actions):
+        #     agent.move_strategy(action)
+        #     agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
+            
+        #     temp_observations[agent.name] = agent.get_observe_info()
+        #     temp_rewards[agent.name] = self._compute_reward(agent, group_name)
+        #     temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
+        #     temp_infos[agent.name] = {}  # 可以添加更多的调试信息
+        for i, agent in enumerate(group):
+            if i < len(group_actions):
+                action = group_actions[i]
+            else:
+                # 如果没有提供动作，根据 agent 的属性选择算法
+                # if hasattr(agent, 'algorithm') and agent.algorithm in self.available_algorithms:
+                #     action = self.available_algorithms[agent.algorithm](agent)  # 使用特定算法生成动作
+                # else:
+                #     action = self.random_action(agent)  # 使用随机动作
+                action = self.action_space.sample()[0] # this need to change to differience algorithm
+
+            # 之后执行相应的动作
             agent.move_strategy(action)
             agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
-            
+
+            # 继续获取状态、奖励、done 和 info
             temp_observations[agent.name] = agent.get_observe_info()
             temp_rewards[agent.name] = self._compute_reward(agent, group_name)
             temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
             temp_infos[agent.name] = {}  # 可以添加更多的调试信息
+
+
 
         # 根据 agent_status 比对结果，生成最终的列表
         new_observations = []
@@ -280,13 +342,25 @@ class LISPredatorPreyEnv(gym.Env):
         return new_observations, rewards, dones, infos
 
 
+    def random_action(self, max_speed):
+        # 生成随机方向的速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 在0到2π之间生成随机角度
+        speed = np.random.uniform(0, max_speed)  # 在0到max_speed之间生成随机速度大小
+        
+        # 根据角度和速度计算x和y分量
+        velocity_x = speed * np.cos(angle)
+        velocity_y = speed * np.sin(angle)
+        
+        # 返回速度向量
+        return np.array([velocity_x, velocity_y], dtype=np.float32)
+    
 
-    def _compute_reward(self, agent, group_name):
+    def _compute_reward(self, agent):
         # 根据组别计算奖励
-        if group_name == 'predators':
+        if agent.type == 'predator':
             # 捕食者奖励
             return agent.health if agent.health > 0 else -1.0
-        elif group_name == 'preys':
+        elif agent.type == 'prey':
             # 猎物奖励
             return agent.health if agent.health > 0 else -1.0
         return 0
@@ -403,21 +477,21 @@ def run_random_simulation(env):
         #     'preys': generate_random_actions(len(env.simulator.preys), env.action_space),
         # }
         actions = env.action_space.sample()  # 从动作空间中采样一个随机动作 # you can change this with your algorithm
-        new_state, rewards, done, truncated,infos = env.step(actions)
+        new_state, rewards, done,truncated, infos = env.step(actions)
 
         # 判断是否所有智能体都已经完成
         # done = all(all(done_group) for done_group in dones.values())
         iteration +=1
 
         # 渲染环境（可选）
-        env.render()
+        # env.render()
         if iteration % 100 == 1:   
             pass
             # print(f"iteration: {iteration}, num_predators: {len(env.simulator.predators)}, num_preys: {len(env.simulator.preys)}")
 
             # print(iteration,end="\t")
-            # print(len(env.simulator.predators),end="\t")
-            # print(len(env.simulator.preys))
+            print(len(env.simulator.predators),end="\t")
+            print(len(env.simulator.preys))
         # 打印当前状态、奖励、是否结束
             # print(f"New State: {new_state}")
             # print(f"Rewards: {new_state}")
@@ -429,27 +503,28 @@ def run_random_simulation(env):
 
 if __name__ == "__main__":
 
-    register(
-        id='LISPredatorPreyEnv-v0',
-        entry_point='gym_env:LISPredatorPreyEnv',
-    )
+    # register(
+    #     id='LISPredatorPreyEnv-v0',
+    #     entry_point='gym_env:LISPredatorPreyEnv',
+    # )
 
-    env = gym.make('LISPredatorPreyEnv-v0')
-    obs,infos = env.reset()  # 重置环境并获取初始观测
+    # env = gym.make('LISPredatorPreyEnv-v0')
+    env = LISPredatorPreyEnv()
+    obs,info = env.reset()  # 重置环境并获取初始观测
     # print("Initial observation:", obs)
     # print(env.simulator.agent_status)
 
     for _ in range(10):  # 运行10个时间步
         action = env.action_space.sample()  # 随机采样一个动作
-        ew_observations, rewards, terminated, truncated, infos = env.step(action)  # 采取一步行动
+        new_observations, rewards, terminated,truncated, infos = env.step(action)  # 采取一步行动
         # print(f"Observation: {obs}, Reward: {rewards}, Done: {terminated}, Info: {infos}")
         print(f"Observation: {type(obs)}, Reward: {np.shape(rewards)}, Done: {np.shape(terminated)}, Info: {np.shape(infos)}")
 
         # print(np.shape(obs))
         if terminated:
-            obs = env.reset()  # 如果环境结束了，则重置环境
+            obs,info = env.reset()  # 如果环境结束了，则重置环境
     
-    check_env(env.unwrapped)
+    # check_env(env.unwrapped)
     check_env(env)
 
     run_random_simulation(env)
