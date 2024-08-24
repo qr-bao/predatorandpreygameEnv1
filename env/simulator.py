@@ -22,15 +22,22 @@ class Simulator:
         self.next_predator_id = 1  # 用于生成唯一的捕食者名称
         self.next_prey_id = 1  # 用于生成唯一的猎物名称
         self.agent_status = {}  # Dictionary to track alive status
+        self.predator_algorithms_predict = {}
+        self.prey_algorithms_predict = {}
+
+
+        
     def initialize(self,all_pred_algorithms,all_prey_algorithms):
-        self.initialize_obstacles()
-        self.initialize_agents(predAlgorithms =all_pred_algorithms,preyAlgorithms = all_prey_algorithms)
-        self.initialize_food()
         self.food_generation_timer = 0  # 重置计时器
         self.dead_predator_count = 0  # 新增变量记录死亡的捕食者数量
         self.food_iteration_count = 0
         self.next_predator_id = 1  # 用于生成唯一的捕食者名称
         self.next_prey_id = 1  # 用于生成唯一的猎物名称
+        self.agent_status = {}
+        self.initialize_obstacles()
+        self.initialize_agents(predAlgorithms =all_pred_algorithms,preyAlgorithms = all_prey_algorithms)
+        self.initialize_food()
+
 
 
 
@@ -110,7 +117,10 @@ class Simulator:
 
         other_prey = otherPrey
         if other_prey.health >= constants.PREY_MIN_HEALTH_FOR_REPRODUCTION:
-            child = prey.crossbreed(other_prey,self.next_prey_id)
+            name = f"Prey{prey.algorithm}_{self.next_prey_id}"
+            self.agent_status[name] = True
+
+            child = prey.crossbreed(other_prey,name)
             if random.random() < constants.MUTATION_CHANCE:
                 child.mutate()
             self.ensure_no_collision(child)
@@ -138,7 +148,9 @@ class Simulator:
 
         other_predator = otherpredator
         if other_predator.health >= constants.PREDATOR_MIN_HEALTH_FOR_REPRODUCTION:
-            child = predator.crossbreed(other_predator,self.next_predator_id)
+            name = f"Pred{predator.algorithm}_{self.next_predator_id}"
+            self.agent_status[name] = True
+            child = predator.crossbreed(other_predator,name)
             if random.random() < constants.MUTATION_CHANCE:
                 child.mutate()
             self.ensure_no_collision(child)
@@ -276,6 +288,7 @@ class Simulator:
 
         # 移除猎物
         prey.is_alive = False
+        self.agent_status[prey.name] = False
         prey.health = 0
         # prey.prey_list.remove(prey)
     def handle_predator_predator_collision(self, predator1, predator2):
@@ -316,36 +329,88 @@ class Simulator:
     #         self.preys.append(child)
     #         self.next_prey_id += 1  # 成功生成猎物后增加ID
 
-    def move_models(self):
-        for predator in self.predators:
-            predator.set_prey_list(self.preys)
-            predator.env_predators = self.predators
-            predator.env_prey = self.preys
-            predator.env_food = self.foods
-            predator.env_obstacles = self.obstacles
-            # self.move_predator(predator)
+    # def move_models(self):
+    #     for predator in self.predators:
+    #         predator.set_prey_list(self.preys)
+    #         predator.env_predators = self.predators
+    #         predator.env_prey = self.preys
+    #         predator.env_food = self.foods
+    #         predator.env_obstacles = self.obstacles
+    #         # self.move_predator(predator)
 
+    #         predator_ob_env = predator.get_observe_info()
+    #         predator_move_vector = predator.get_target(predator_ob_env)
+    #         # print(move_vector)
+    #         predator.move_strategy(predator_move_vector)
+    #         predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+
+    #         predator.increment_iteration()  # 增加迭代计数器
+
+    #     for prey in self.preys:
+    #         prey.env_predators = self.predators
+    #         prey.env_prey = self.preys
+    #         prey.env_food = self.foods
+    #         prey.env_obstacles = self.obstacles
+
+    #         # self.move_prey(prey)
+    #         prey_ob_env = prey.get_observe_info()
+    #         prey_move_vector = prey.get_target(prey_ob_env)
+    #         prey.move_strategy(prey_move_vector)
+    #         prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+            
+    #         prey.increment_iteration()  # 增加迭代计数器
+    def update_predator_environment(self,predator, preys, predators, foods, obstacles):
+        predator.set_prey_list(preys)
+        predator.env_predators = predators
+        predator.env_prey = preys
+        predator.env_food = foods
+        predator.env_obstacles = obstacles
+
+    def update_prey_environment(self,prey, preys, predators, foods, obstacles):
+        prey.env_predators = predators
+        prey.env_prey = preys
+        prey.env_food = foods
+        prey.env_obstacles = obstacles
+
+    def move_models(self,actions = {}):
+        predator_move_vector = None
+        for predator in self.predators:
+            self.update_predator_environment(predator, self.preys, self.predators, self.foods, self.obstacles)
             predator_ob_env = predator.get_observe_info()
-            predator_move_vector = predator.get_target(predator_ob_env)
-            # print(move_vector)
+            # predator_move_vector = predator.get_target(predator_ob_env)
+            # predator_move_vector = actions.get(predator.name, predator.get_target(predator_ob_env))
+            predator_move_vector = actions.get(predator.name, self.trained_algorithm(predator,predator.type,predator.algorithm,predator_ob_env))
+
+
             predator.move_strategy(predator_move_vector)
             predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
-
             predator.increment_iteration()  # 增加迭代计数器
 
         for prey in self.preys:
-            prey.env_predators = self.predators
-            prey.env_prey = self.preys
-            prey.env_food = self.foods
-            prey.env_obstacles = self.obstacles
-
-            # self.move_prey(prey)
+            self.update_prey_environment(prey, self.preys, self.predators, self.foods, self.obstacles)
             prey_ob_env = prey.get_observe_info()
-            prey_move_vector = prey.get_target(prey_ob_env)
+            # prey_move_vector = prey.get_target(prey_ob_env)
+            prey_move_vector = actions.get(prey.name, self.trained_algorithm(prey,prey.type,prey.algorithm,prey_ob_env))
+
             prey.move_strategy(prey_move_vector)
             prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
-            
             prey.increment_iteration()  # 增加迭代计数器
+    def trained_algorithm(self,agent,agent_type, agent_algorithm, observation_info):
+        if agent_type == "predator":
+            algorithm_function = self.predator_algorithms_predict.get(agent_algorithm)
+        elif agent_type == "prey":
+            algorithm_function = self.prey_algorithms_predict.get(agent_algorithm)
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
+        
+        if algorithm_function is None:
+            # algorithm_function = self.prey_algorithms_predict.get('random')
+            # algorithm_function = math_algorithms
+            return agent.get_target(observation_info)
+            # raise ValueError(f"Unknown algorithm: {agent_algorithm} for {agent_type}")
+        
+        return algorithm_function(observation_info)
+
     def obsreve_prey(self):
         pass
     def observe_info_predator(self):

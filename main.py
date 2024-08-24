@@ -154,13 +154,14 @@ while iteration_count<10000000:
 
         
         sim.move_models()
-        sim.add_food()  # 传递时间间隔
         sim.prey_hunt()
         sim.check_collisions()
         # sim.predator_hunt()
         # new_prey_born, new_predator_born = sim.applyGeneticAlgorithm()
         sim.decrease_health()  # 更新健康值
         sim.remove_dead()  # 清理死亡个体
+        sim.add_food()  # 传递时间间隔
+
         iteration_count += 1  # 增加迭代计数器
         sim.draw_models(screen)
 

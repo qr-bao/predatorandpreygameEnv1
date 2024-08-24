@@ -8,6 +8,7 @@ class Predator(Creature):
         self.sight_range = constants.PREDATOR_SIGHT_RANGE  # 使用新的视觉范围
         self.prey_list = []
         self.name = name
+        self.type = 'predator'
         self.algorithm = algorithm
     #     self.log()
     # def log(self):
@@ -43,8 +44,8 @@ class Predator(Creature):
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
-        self.velocity[0] += move_vector[0]  # 更新 x 方向的速度
-        self.velocity[1] += move_vector[1]  # 更新 y 方向的速度
+        self.velocity[0] = move_vector[0]  # 更新 x 方向的速度
+        self.velocity[1] = move_vector[1]  # 更新 y 方向的速度
 
         # 限制速度
         speed = math.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2)
@@ -91,8 +92,8 @@ class Predator(Creature):
             # 停下来并旋转观察周围
             if random.random() < constants.PREDATOR_ROTATION_CHANCE:
                 angle = random.uniform(-math.pi, math.pi)
-                self.velocity[0] = math.cos(angle) * constants.PREDATOR_ROTATION_SPEED
-                self.velocity[1] = math.sin(angle) * constants.PREDATOR_ROTATION_SPEED
+                move_vector[0] = math.cos(angle) * constants.PREDATOR_ROTATION_SPEED
+                move_vector[1] = math.sin(angle) * constants.PREDATOR_ROTATION_SPEED
             else:
                 move_vector[0] = 0
                 move_vector[1] = 0
@@ -115,11 +116,12 @@ class Predator(Creature):
                 prey_list.remove(prey)
                 return
 
-    def crossbreed(self, other,next_pred_id):
+    def crossbreed(self, other,name):
         child_x = (self.rect.x + other.rect.x) // 2
         child_y = (self.rect.y + other.rect.y) // 2
-        name = f"Pred{self.algorithm}_{next_pred_id}"  # 使用全局唯一ID生成名称
+        # name = f"Pred{self.algorithm}_{next_pred_id}"  # 使用全局唯一ID生成名称
         child = Predator(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=self.algorithm)
+        
         return child
 
     def mutate(self):

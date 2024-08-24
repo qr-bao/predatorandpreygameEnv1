@@ -2,7 +2,8 @@ import os
 
 # 定义文件夹路径
 parent_folder = os.path.dirname(os.path.abspath(__file__))  # 当前父文件夹
-env_folder = os.path.join(parent_folder, 'env')  # env 文件夹路径
+two_parent_folder = os.path.dirname(parent_folder)
+env_folder = os.path.join(two_parent_folder, 'env')  # env 文件夹路径
 
 # 定义要生成的文本文件路径
 output_file = os.path.join(parent_folder, 'combined_python_files.txt')

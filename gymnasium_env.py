@@ -202,6 +202,7 @@ class LISPredatorPreyEnv(gym.Env):
         # 将 observations 列表转换为 numpy 数组
         new_observations = np.array(new_state, dtype=np.float32)
         # 调用模拟器的其他方法
+
         self.simulator.add_food()  # 传递时间间隔
         self.simulator.prey_hunt()
         self.simulator.check_collisions()
@@ -473,7 +474,8 @@ if __name__ == "__main__":
     while not done:
         action, _states = model.predict(obs)
         obs, reward, done,truncated, info = env.step(action)
-        env.render()  # 可视化环境（如果需要）
+        print(len(env.simulator.agent_status))
+        # env.render()  # 可视化环境（如果需要）
 
     check_env(env.unwrapped)
     # check_env(env)

@@ -487,7 +487,7 @@ def run_random_simulation(env):
         iteration +=1
 
         # 渲染环境（可选）
-        env.render()
+        # env.render()
         if iteration % 100 == 1:   
             pass
             # print(f"iteration: {iteration}, num_predators: {len(env.simulator.predators)}, num_preys: {len(env.simulator.preys)}")
@@ -513,7 +513,7 @@ if __name__ == "__main__":
 
     # env = gym.make('LISPredatorPreyEnv-v0')
     env = LISPredatorPreyEnv()
-    env.pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+    env.pred_algorithms = ["PPO","PPO","PPO","PPO","DDPG","DDPG","DDPG"]
     env.pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
     # Define the algorithm functions
     def ppo_predator_algorithm(observation_info):
