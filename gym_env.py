@@ -50,9 +50,12 @@ class LISPredatorPreyEnv(gym.Env):
         self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
         self.interation = 0
         self.initialnames = []
+        self.prey_algorithms = []
+        self.pred_algorithms = []
+
         # self.initialdicts = {}
         # 调用 reset 方法初始化环境
-        self.reset() 
+        # self.reset() 
 
     # def reset(self):
     #     # 重置模拟器
@@ -118,10 +121,10 @@ class LISPredatorPreyEnv(gym.Env):
         self.group_map['preys'] = [prey.name for prey in simPreys]
 
     def reset_algorithm(self):
-        prey_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
-        pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
-        all_pred_algorithms = assign_algorithms_to_agents(constants.NUM_PREDATORS,pred_algorithms)
-        all_prey_algorithms = assign_algorithms_to_agents(constants.NUM_PREY,prey_algorithms)
+        # prey_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+        # pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+        all_pred_algorithms = assign_algorithms_to_agents(constants.NUM_PREDATORS,self.pred_algorithms)
+        all_prey_algorithms = assign_algorithms_to_agents(constants.NUM_PREY,self.prey_algorithms)
         return all_pred_algorithms+all_prey_algorithms
         # assigned_Predalgorithms = assign_algorithms_to_agents(self.simulator.predators, all_pred_algorithms)
         # assigned_Preyalgorithms = assign_algorithms_to_agents(self.simulator.preys, all_prey_algorithms)
@@ -281,78 +284,78 @@ class LISPredatorPreyEnv(gym.Env):
     #         infos.append({})  # 可以添加更多的调试信息
 
     #     return new_observations, rewards, dones, infos
-    def _step_group(self, group_name, group_actions, agent_status):
-        # 执行每个组的动作，并获取新的状态、奖励、是否完成和信息
-        temp_observations = {}
-        temp_rewards = {}
-        temp_dones = {}
-        temp_infos = {}
+    # def _step_group(self, group_name, group_actions, agent_status):
+    #     # 执行每个组的动作，并获取新的状态、奖励、是否完成和信息
+    #     temp_observations = {}
+    #     temp_rewards = {}
+    #     temp_dones = {}
+    #     temp_infos = {}
 
-        group = getattr(self.simulator, group_name)
+    #     group = getattr(self.simulator, group_name)
         
-        # for agent, action in zip(group, group_actions):
-        #     agent.move_strategy(action)
-        #     agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
+    #     # for agent, action in zip(group, group_actions):
+    #     #     agent.move_strategy(action)
+    #     #     agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
             
-        #     temp_observations[agent.name] = agent.get_observe_info()
-        #     temp_rewards[agent.name] = self._compute_reward(agent, group_name)
-        #     temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
-        #     temp_infos[agent.name] = {}  # 可以添加更多的调试信息
-        for i, agent in enumerate(group):
-            if i < len(group_actions):
-                action = group_actions[i]
-            else:
-                # 如果没有提供动作，根据 agent 的属性选择算法
-                # if hasattr(agent, 'algorithm') and agent.algorithm in self.available_algorithms:
-                #     action = self.available_algorithms[agent.algorithm](agent)  # 使用特定算法生成动作
-                # else:
-                #     action = self.random_action(agent)  # 使用随机动作
-                action = self.action_space.sample()[0] # this need to change to differience algorithm
+    #     #     temp_observations[agent.name] = agent.get_observe_info()
+    #     #     temp_rewards[agent.name] = self._compute_reward(agent, group_name)
+    #     #     temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
+    #     #     temp_infos[agent.name] = {}  # 可以添加更多的调试信息
+    #     for i, agent in enumerate(group):
+    #         if i < len(group_actions):
+    #             action = group_actions[i]
+    #         else:
+    #             # 如果没有提供动作，根据 agent 的属性选择算法
+    #             # if hasattr(agent, 'algorithm') and agent.algorithm in self.available_algorithms:
+    #             #     action = self.available_algorithms[agent.algorithm](agent)  # 使用特定算法生成动作
+    #             # else:
+    #             #     action = self.random_action(agent)  # 使用随机动作
+    #             action = self.action_space.sample()[0] # this need to change to differience algorithm
 
-            # 之后执行相应的动作
-            agent.move_strategy(action)
-            agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
+    #         # 之后执行相应的动作
+    #         agent.move_strategy(action)
+    #         agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
 
-            # 继续获取状态、奖励、done 和 info
-            temp_observations[agent.name] = agent.get_observe_info()
-            temp_rewards[agent.name] = self._compute_reward(agent, group_name)
-            temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
-            temp_infos[agent.name] = {}  # 可以添加更多的调试信息
+    #         # 继续获取状态、奖励、done 和 info
+    #         temp_observations[agent.name] = agent.get_observe_info()
+    #         temp_rewards[agent.name] = self._compute_reward(agent, group_name)
+    #         temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
+    #         temp_infos[agent.name] = {}  # 可以添加更多的调试信息
 
 
 
-        # 根据 agent_status 比对结果，生成最终的列表
-        new_observations = []
-        rewards = []
-        dones = []
-        infos = []
+    #     # 根据 agent_status 比对结果，生成最终的列表
+    #     new_observations = []
+    #     rewards = []
+    #     dones = []
+    #     infos = []
         
-        for agent_name in agent_status.keys():
-            if agent_name in temp_observations:
-                new_observations.append(temp_observations[agent_name])
-                rewards.append(temp_rewards[agent_name])
-                dones.append(temp_dones[agent_name])
-                infos.append(temp_infos[agent_name])
-            else:
-                new_observations.append(np.array(self.zero_list))  # 如果 agent 不存在，则返回0
-                rewards.append(0)  # 如果 agent 不存在，则返回0
-                dones.append(True)  # 如果 agent 不存在，则认为它完成了
-                infos.append({})  # 如果 agent 不存在，则返回空信息字典
+    #     for agent_name in agent_status.keys():
+    #         if agent_name in temp_observations:
+    #             new_observations.append(temp_observations[agent_name])
+    #             rewards.append(temp_rewards[agent_name])
+    #             dones.append(temp_dones[agent_name])
+    #             infos.append(temp_infos[agent_name])
+    #         else:
+    #             new_observations.append(np.array(self.zero_list))  # 如果 agent 不存在，则返回0
+    #             rewards.append(0)  # 如果 agent 不存在，则返回0
+    #             dones.append(True)  # 如果 agent 不存在，则认为它完成了
+    #             infos.append({})  # 如果 agent 不存在，则返回空信息字典
 
-        return new_observations, rewards, dones, infos
+    #     return new_observations, rewards, dones, infos
 
 
-    def random_action(self, max_speed):
-        # 生成随机方向的速度
-        angle = np.random.uniform(0, 2 * np.pi)  # 在0到2π之间生成随机角度
-        speed = np.random.uniform(0, max_speed)  # 在0到max_speed之间生成随机速度大小
+    # def random_action(self, max_speed):
+    #     # 生成随机方向的速度
+    #     angle = np.random.uniform(0, 2 * np.pi)  # 在0到2π之间生成随机角度
+    #     speed = np.random.uniform(0, max_speed)  # 在0到max_speed之间生成随机速度大小
         
-        # 根据角度和速度计算x和y分量
-        velocity_x = speed * np.cos(angle)
-        velocity_y = speed * np.sin(angle)
+    #     # 根据角度和速度计算x和y分量
+    #     velocity_x = speed * np.cos(angle)
+    #     velocity_y = speed * np.sin(angle)
         
-        # 返回速度向量
-        return np.array([velocity_x, velocity_y], dtype=np.float32)
+    #     # 返回速度向量
+    #     return np.array([velocity_x, velocity_y], dtype=np.float32)
     
 
     def _compute_reward(self, agent):
@@ -484,7 +487,7 @@ def run_random_simulation(env):
         iteration +=1
 
         # 渲染环境（可选）
-        # env.render()
+        env.render()
         if iteration % 100 == 1:   
             pass
             # print(f"iteration: {iteration}, num_predators: {len(env.simulator.predators)}, num_preys: {len(env.simulator.preys)}")
@@ -510,11 +513,104 @@ if __name__ == "__main__":
 
     # env = gym.make('LISPredatorPreyEnv-v0')
     env = LISPredatorPreyEnv()
+    env.pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+    env.pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+    # Define the algorithm functions
+    def ppo_predator_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREY_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+
+    def dqn_predator_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREY_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+
+    def random_predator_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREDATOR_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+
+    def ppo_prey_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREY_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+
+    def dqn_prey_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREY_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+    def random_prey_algorithm(observation_info):
+        angle = np.random.uniform(0, 2 * np.pi)
+
+        # Generate random length less than A
+        length = np.random.uniform(0, constants.PREY_MAX_SPEED)
+
+        # Calculate x and y based on angle and length
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        velocity = np.array([x, y], dtype=np.float32)
+        return velocity
+
+    # Create dictionaries to store algorithms
+    env.simulator.predator_algorithms_predict = {
+        "PPO": ppo_predator_algorithm,
+        "DDPG": dqn_predator_algorithm,
+        "random": random_predator_algorithm
+    }
+
+    env.simulator.prey_algorithms_predict = {
+        "PPO": ppo_prey_algorithm,
+        "DDPG": dqn_prey_algorithm,
+        "random":random_prey_algorithm
+    }
+
+    # Master function to select and run the appropriate algorithm
+    check_env(env)
     obs,info = env.reset()  # 重置环境并获取初始观测
     # print("Initial observation:", obs)
     # print(env.simulator.agent_status)
 
     for _ in range(10):  # 运行10个时间步
+        # create initial agent algorithm 
+
+
+
         action = env.action_space.sample()  # 随机采样一个动作
         new_observations, rewards, terminated,truncated, infos = env.step(action)  # 采取一步行动
         # print(f"Observation: {obs}, Reward: {rewards}, Done: {terminated}, Info: {infos}")
