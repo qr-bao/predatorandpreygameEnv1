@@ -63,13 +63,11 @@ class Simulator:
             print("algorithms lens not equal number of agent")
         for predalgorithm in predAlgorithms:
             self.generate_predator(algorithm=predalgorithm)
-
         for preyalgorithm in preyAlgorithms:
             self.generate_prey(algorithm=preyalgorithm)
 
     def initialize_food(self):
         self.foods = []
-
         for _ in range(constants.NUM_FOOD):
             self.generate_food()
 
@@ -85,6 +83,7 @@ class Simulator:
                 self.agent_status[new_prey.name] = True  # Mark as alive
                 self.next_prey_id += 1  # 在成功生成猎物后增加ID
                 break
+
 
     def generate_predator(self,algorithm="random"):
         while True:
@@ -261,7 +260,7 @@ class Simulator:
     #         self.move_prey(prey)
     #         prey.increment_iteration()  # 增加迭代计数器
 
-    def check_collisions(self):
+    def check_collisions(self,initialdicts):
         # 捕食者和猎物之间的相遇检测
         for predator in self.predators:
             for prey in self.preys:
@@ -380,7 +379,11 @@ class Simulator:
             # predator_move_vector = predator.get_target(predator_ob_env)
             # predator_move_vector = actions.get(predator.name, predator.get_target(predator_ob_env))
             predator_move_vector = actions.get(predator.name, self.trained_algorithm(predator,predator.type,predator.algorithm,predator_ob_env))
-
+            if len(predator_move_vector) == 3:
+                born_factor, b, c = predator_move_vector
+                predator.born = born_factor
+            else:
+                print("move_models_predator vectoer len not euql 3")
 
             predator.move_strategy(predator_move_vector)
             predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
@@ -391,7 +394,14 @@ class Simulator:
             prey_ob_env = prey.get_observe_info()
             # prey_move_vector = prey.get_target(prey_ob_env)
             prey_move_vector = actions.get(prey.name, self.trained_algorithm(prey,prey.type,prey.algorithm,prey_ob_env))
+            # 解包并只取 (b, c)
+            if len(prey_move_vector) == 3:
+                born_factor, b, c = prey_move_vector
+                prey.born = born_factor
+            else:
+                print("move_models_prey vectoer len not euql 3")
 
+            prey_move_vector = (b, c)
             prey.move_strategy(prey_move_vector)
             prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
             prey.increment_iteration()  # 增加迭代计数器

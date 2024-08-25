@@ -48,8 +48,8 @@ class Prey(Creature):
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
-        self.velocity[0] = move_vector[0]  # 更新 x 方向的速度
-        self.velocity[1] = move_vector[1]  # 更新 y 方向的速度
+        self.velocity[0] += move_vector[0]  # 更新 x 方向的速度
+        self.velocity[1] += move_vector[1]  # 更新 y 方向的速度
 
         # 限制速度
         speed = math.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2)
@@ -138,9 +138,11 @@ class Prey(Creature):
                 angle = random.uniform(-math.pi, math.pi)
                 move_vector[0] += math.cos(angle) * constants.PREY_RANDOM_MOVE_SPEED
                 move_vector[1] += math.sin(angle) * constants.PREY_RANDOM_MOVE_SPEED
+        born_factor = np.random.uniform(0, 1)
 
         # 将避让捕食者和靠近食物的向量相结合
         final_vector = [
+            born_factor,
             move_vector[0] + avoid_vector[0],
             move_vector[1] + avoid_vector[1]
         ]

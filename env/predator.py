@@ -2,6 +2,7 @@ import math
 from env.creature import Creature
 import env.constants as constants
 import random
+import numpy as np
 class Predator(Creature):
     def __init__(self, x, y, size,name="pred",algorithm = "initalrandom"):
         super().__init__(x, y, size, (128,128,128), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
@@ -44,8 +45,8 @@ class Predator(Creature):
 
         # 更新速度部分
         self.previous_velocity = self.velocity[:]
-        self.velocity[0] = move_vector[0]  # 更新 x 方向的速度
-        self.velocity[1] = move_vector[1]  # 更新 y 方向的速度
+        self.velocity[0] += move_vector[0]  # 更新 x 方向的速度
+        self.velocity[1] += move_vector[1]  # 更新 y 方向的速度
 
         # 限制速度
         speed = math.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2)
@@ -104,6 +105,8 @@ class Predator(Creature):
             sound_direction = sound[2]
             move_vector[0] += sound_intensity * math.cos(sound_direction)
             move_vector[1] += sound_intensity * math.sin(sound_direction)
+        born_factor = np.random.uniform(0, 1)
+        move_vector = [born_factor,move_vector[0],move_vector[1]]
 
         return move_vector
     def hunt_prey(self, prey_list):

@@ -22,6 +22,7 @@ class Creature(ABC):
         self.selected = False  # 新增的
         self.iteration_counter = 0  # 新增的迭代计数器
         self.is_alive = True
+        self.born = True
         
     
     def increment_iteration(self):

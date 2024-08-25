@@ -21,7 +21,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-
 class LISPredatorPreyEnv(gym.Env):
     def __init__(self,prey_algorithms =[],pred_algorithms=[],predator_algorithms_predict ={},prey_algorithms_predict={} ):
         super(LISPredatorPreyEnv, self).__init__()
@@ -211,14 +210,6 @@ class LISPredatorPreyEnv(gym.Env):
             actions.append(action)
         return actions
 
-
-
-
-
-
-
-
-
     def assign_algorithms_to_agents(self,len_agents, algorithm_names):
         """
         分配算法给每个智能体。
@@ -248,136 +239,6 @@ class LISPredatorPreyEnv(gym.Env):
         for agent, algorithm in zip(agents, algorithms):
             agent.algorithm = algorithm  # 将算法分配给智能体
 
-import matplotlib.pyplot as plt
-
-def update_and_plot(iteration, env, data_storage):
-    # Count the number of predators, prey, and food
-    predator_count = len(env.simulator.predators)
-    prey_count = len(env.simulator.preys)
-    food_count = len(env.simulator.foods)
-
-    # Calculate total healths
-    predator_total_health = sum(predator.health for predator in env.simulator.predators)
-    prey_total_health = sum(prey.health for prey in env.simulator.preys)
-    food_total_health = (len(env.simulator.foods) * constants.FOOD_HEALTH_GAIN)
-    total_energy = predator_total_health+prey_total_health+food_total_health
-
-    # Store the current values
-    data_storage['iterations'].append(iteration)
-    data_storage['predator_counts'].append(predator_count)
-    data_storage['prey_counts'].append(prey_count)
-    data_storage['total_counts'].append(predator_count+prey_count)
-    data_storage['predator_healths'].append(predator_total_health)
-    data_storage['prey_healths'].append(prey_total_health)
-    data_storage['total_healths'].append(total_energy)
-
-    # Update plots
-    plt.clf()
-
-    # Plot counts
-    plt.subplot(2, 1, 1)
-    plt.plot(data_storage['iterations'], data_storage['predator_counts'], label='Predator Count')
-    plt.plot(data_storage['iterations'], data_storage['prey_counts'], label='Prey Count')
-    plt.plot(data_storage['iterations'], data_storage['total_counts'], label='total Count')
-    plt.xlabel('Iteration')
-    plt.ylabel('Count')
-    plt.title('Number of Predators, Prey, and total Over Time')
-    plt.legend()
-
-    # Plot healths
-    plt.subplot(2, 1, 2)
-    plt.plot(data_storage['iterations'], data_storage['predator_healths'], label='Predator Total Health')
-    plt.plot(data_storage['iterations'], data_storage['prey_healths'], label='Prey Total Health')
-    plt.plot(data_storage['iterations'], data_storage['total_healths'], label=' Total Health')
-    plt.xlabel('Iteration')
-    plt.ylabel('Total Health')
-    plt.title('')
-    plt.legend()
-
-    plt.pause(0.01)  # Pause to update the plot in real-time
-
-
-
-def run_random_simulation(env):
-    
-    # env = PredatorPreyEnv()
-    observations,infos = env.reset()
-    obs = observations
-    # print("Returned Observation:", obs)
-    # print("Observation Space Low:", env.observation_space.low)
-    # print("Observation Space High:", env.observation_space.high)
-    # print("Observation dtype:", obs.dtype)
-    # print("Expected dtype:", env.observation_space.dtype)
-    # assert env.observation_space.contains(obs), "Observation is out of bounds!"
-
-    # print(np.shape(observations),end="---")
-    # print(np.shape(env.observation_space))
-    # check_env_specs(env)
-
-    # check_env(env)
-    # rollout = env.rollout(10)
-    # print(f"rollout of {10} steps:", rollout)
-    # print("Shape of the rollout TensorDict:", rollout.batch_size)
-    
-
-    # observations = env.reset()
-    #print(np.shape(observation))
-    # Initialize lists to store the values for each iteration
-
-    # Initialize a dictionary to store the data
-    data_storage = {
-        'iterations': [],
-        'predator_counts': [],
-        'prey_counts': [],
-        'total_counts': [],
-        'predator_healths': [],
-        'prey_healths': [],
-        'total_healths': []
-    }
-
-    # Initialize the plot
-    plt.figure(figsize=(10, 8))
-    plt.ion()  # Enable interactive mode
-    done = False
-    iteration = 0
-
-    while not done:
-        
-
-        # actions = {
-        #     'predators': generate_random_actions(len(env.simulator.predators), env.action_space),
-        #     'preys': generate_random_actions(len(env.simulator.preys), env.action_space),
-        # }
-        if iteration % 100 == 1:  
-            update_and_plot(iteration, env, data_storage)
-
-        actions = env.action_space.sample()  # 从动作空间中采样一个随机动作 # you can change this with your algorithm
-        new_state, rewards, done,truncated, infos = env.step(actions)
-
-        # 判断是否所有智能体都已经完成
-        # done = all(all(done_group) for done_group in dones.values())
-        iteration +=1
-
-        # 渲染环境（可选）
-        # env.render()
-        if iteration % 100 == 1:   
-            pass
-            # print(f"iteration: {iteration}, num_predators: {len(env.simulator.predators)}, num_preys: {len(env.simulator.preys)}")
-
-            # print(iteration,end="\t")
-            print(len(env.simulator.predators),end="\t")
-            print(len(env.simulator.preys))
-        # 打印当前状态、奖励、是否结束
-            # print(f"New State: {new_state}")
-            # print(f"Rewards: {new_state}")
-            # print(len(new_state))
-            # print(f"Dones: {np.shape(done)}")
-            # print(f"Dones length:{len(done)}")
-            # print(f"Infos: {infos}")
-    plt.ioff()  # Disable interactive mode
-    plt.show()  # Keep the final plot open after the loop ends
-
-
 if __name__ == "__main__":
 
     # register(
@@ -385,8 +246,7 @@ if __name__ == "__main__":
     #     entry_point='gym_env:LISPredatorPreyEnv',
     # )
 
-    # env = gym.make('LISPredatorPreyEnv-v0')
-
+    env = LISPredatorPreyEnv()
     prey_algorithms = ["PPO","PPO","PPO","PPO","DDPG","DDPG","DDPG"]
     pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
     # Define the algorithm functions
@@ -487,34 +347,26 @@ if __name__ == "__main__":
         "random":random_prey_algorithm
     }
     env = LISPredatorPreyEnv(prey_algorithms=prey_algorithms,pred_algorithms=pred_algorithms,predator_algorithms_predict =predator_algorithms_predict,prey_algorithms_predict =prey_algorithms_predict)
-
-    # Master function to select and run the appropriate algorithm
+    check_env(env.unwrapped)
     check_env(env)
-    obs,info = env.reset()  # 重置环境并获取初始观测
-    # print("Initial observation:", obs)
-    # print(env.simulator.agent_status)
 
-    for _ in range(10):  # 运行10个时间步
-        # create initial agent algorithm 
-
-
-
-        action = env.action_space.sample()  # 随机采样一个动作
-        new_observations, rewards, terminated,truncated, infos = env.step(action)  # 采取一步行动
-        len(env.simulator.predators)
-        len(env.simulator.preys)
-        len(env.simulator.foods)
-        predator_total_health = sum(predator.health for predator in env.simulator.predators)
-        prey_total_health = sum(prey.health for prey in env.simulator.preys)
-        food_total_health = len(env.simulator.foods)* constants.FOOD_HEALTH_GAIN
-        # print(f"Observation: {obs}, Reward: {rewards}, Done: {terminated}, Info: {infos}")
-        print(f"Observation: {type(obs)}, Reward: {np.shape(rewards)}, Done: {np.shape(terminated)}, Info: {np.shape(infos)}")
-
-        # print(np.shape(obs))
-        if terminated:
-            obs,info = env.reset()  # 如果环境结束了，则重置环境
+    model = PPO("MlpPolicy", env, verbose=1)
     
-    # check_env(env.unwrapped)
-    check_env(env)
+    
+    model.learn(total_timesteps=2)  # 可以根据需求调整时间步数
+    model.save("ppo_predator_prey")
+    # 加载训练好的模型
+    model = PPO.load("ppo_predator_prey")
 
-    run_random_simulation(env)
+    # 重置环境
+    obs, info = env.reset()
+
+    # 测试模型
+    done = False
+    while not done:
+        action, _states = model.predict(obs)
+        obs, reward, done,truncated, info = env.step(action)
+        print(len(env.simulator.agent_status))
+        env.render()  # 可视化环境（如果需要）
+
+    check_env(env.unwrapped)
