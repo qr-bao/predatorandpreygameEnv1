@@ -269,14 +269,20 @@ class Simulator:
         
         # 捕食者之间的相遇检测
         for i, predator1 in enumerate(self.predators):
+            if not predator1.born:
+                continue
             for predator2 in self.predators[i+1:]:
-                if predator1.rect.colliderect(predator2.rect):
-                    self.handle_predator_predator_collision(predator1, predator2)
+                if predator2.born:
+                    if predator1.rect.colliderect(predator2.rect):
+                        self.handle_predator_predator_collision(predator1, predator2)
         # 猎物之间的相遇检测
         for i, prey1 in enumerate(self.preys):
+            if not prey1.born:
+                continue
             for prey2 in self.preys[i+1:]:
-                if prey1.rect.colliderect(prey2.rect):
-                    self.handle_prey_prey_collision(prey1, prey2)
+                if prey2.born:
+                    if prey1.rect.colliderect(prey2.rect):
+                        self.handle_prey_prey_collision(prey1, prey2)
         
     def handle_predator_prey_collision(self, predator, prey):
         # 增加捕食者的健康值
@@ -397,7 +403,10 @@ class Simulator:
             # 解包并只取 (b, c)
             if len(prey_move_vector) == 3:
                 born_factor, b, c = prey_move_vector
-                prey.born = born_factor
+                if born_factor> 0.5:
+                    prey.born = True
+                else:
+                    prey.born = False
             else:
                 print("move_models_prey vectoer len not euql 3")
 

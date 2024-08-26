@@ -342,13 +342,6 @@ def generate_random_actions(num_agents, action_space):
     return actions
 
 
-
-
-
-
-
-
-
 def assign_algorithms_to_agents(len_agents, algorithm_names):
     """
     分配算法给每个智能体。
