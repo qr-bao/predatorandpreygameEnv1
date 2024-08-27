@@ -242,7 +242,7 @@ class Creature(ABC):
         
     #     return observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds
     def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
-        def process_matrix(matrix, target_shape=(5, 3)):
+        def process_matrix(matrix, target_shape=(5, 4)):
             """
             裁剪或填充矩阵，使其保持 target_shape 的大小。
 
@@ -304,7 +304,10 @@ class Creature(ABC):
             for target in visible_targets:
                 if is_in_sight(target) and not is_occluded(target, obstacles):
                     relative_x, relative_y = to_relative_coordinates(target)
-                    visible_list.append([type_id, relative_x, relative_y])
+                    if hasattr(target, 'algorithm'):
+                        visible_list.append([type_id, relative_x, relative_y,target.algorithm])
+                    else:
+                        visible_list.append([type_id, relative_x, relative_y,0])
                     # visible_list = process_matrix(visible_list)
             return visible_list
 
@@ -340,7 +343,7 @@ class Creature(ABC):
         # 收集听觉信息
         heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
         sounds = [
-            [9, get_sound_intensity(entity), get_sound_direction(entity)]
+            [9, get_sound_intensity(entity), get_sound_direction(entity),0]
             for entity in heard_entities
         ]
         sounds =process_matrix(sounds)

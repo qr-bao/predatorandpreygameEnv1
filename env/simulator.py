@@ -56,10 +56,10 @@ class Simulator:
                     self.obstacles.append(new_obstacle)
                     break
 
-    def initialize_agents(self,predAlgorithms = ["random" for _ in range(constants.NUM_PREDATORS)],preyAlgorithms = ["random" for _ in range(constants.NUM_PREY)]):
+    def initialize_agents(self,predAlgorithms = [],preyAlgorithms = []):
         self.predators = []
         self.preys = []
-        if len(predAlgorithms)!= constants.NUM_PREDATORS and len(preyAlgorithms)!= constants.NUM_PREY:
+        if len(predAlgorithms)!= constants.NUM_PREDATORS or len(preyAlgorithms)!= constants.NUM_PREY:
             print("algorithms lens not equal number of agent")
         for predalgorithm in predAlgorithms:
             self.generate_predator(algorithm=predalgorithm)
@@ -123,6 +123,7 @@ class Simulator:
             if random.random() < constants.MUTATION_CHANCE:
                 child.mutate()
             self.ensure_no_collision(child)
+            self.health_update(prey,other_prey,child,constants.HEALTH_RENEW)
             self.preys.append(child)
             self.next_prey_id += 1  # 成功生成猎物后增加ID
         # # 生成新的猎物
@@ -153,40 +154,59 @@ class Simulator:
             if random.random() < constants.MUTATION_CHANCE:
                 child.mutate()
             self.ensure_no_collision(child)
+            self.health_update(predator,other_predator,child,constants.HEALTH_RENEW)
             self.predators.append(child)
             self.next_predator_id += 1  # 成功生成猎物后增加ID
 
+    def health_update(self,parentA, parentB, child, health_decrease_rate):
+        # 计算 a 和 b 减少的生命值
+        health_parentA_decrease = parentA.health * (health_decrease_rate)
+        health_parentB_decrease = parentB.health * (health_decrease_rate)
+        
+        # 更新 a 和 b 的生命值
+        parentA.health -= health_parentA_decrease
+        parentB.health -= health_parentB_decrease
+        
+        # 更新 c 的生命值为减少的生命值之和
+        child.health = health_parentA_decrease + health_parentB_decrease
+    # def applyGeneticAlgorithm(self):
+    #     new_prey_born = 0
+    #     new_predator_born = 0
 
-    def applyGeneticAlgorithm(self):
-        new_prey_born = 0
-        new_predator_born = 0
+    #     for prey in self.preys:
+    #         initial_prey_count = len(self.preys)
+    #         self.breedPrey(prey)
+    #         if len(self.preys) > initial_prey_count:
+    #             new_prey_born += 1
 
-        for prey in self.preys:
-            initial_prey_count = len(self.preys)
-            self.breedPrey(prey)
-            if len(self.preys) > initial_prey_count:
-                new_prey_born += 1
+    #     for predator in self.predators:
+    #         initial_predator_count = len(self.predators)
+    #         self.breedPredator(predator)
+    #         if len(self.predators) > initial_predator_count:
+    #             new_predator_born += 1
 
-        for predator in self.predators:
-            initial_predator_count = len(self.predators)
-            self.breedPredator(predator)
-            if len(self.predators) > initial_predator_count:
-                new_predator_born += 1
+    #     return new_prey_born, new_predator_born
 
-        return new_prey_born, new_predator_born
+    # def generate_agent(self):
+    #     self.applyGeneticAlgorithm()
 
-    def generate_agent(self):
-        self.applyGeneticAlgorithm()
-
-    def ensure_no_collision(self, agent):
+    def ensure_no_collision(self, agent, offset=50):
+        initial_x, initial_y = agent.rect.x, agent.rect.y
+        
         while any(agent.rect.colliderect(obs.rect) for obs in self.obstacles):
-            agent.rect.x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - agent.rect.width)
-            agent.rect.y = random.randint(0, self.screen_height - agent.rect.height)
+            agent.rect.x = random.randint(
+                max(constants.CONTROL_PANEL_WIDTH, initial_x - offset), 
+                min(self.screen_width - agent.rect.width, initial_x + offset)
+            )
+            agent.rect.y = random.randint(
+                max(0, initial_y - offset), 
+                min(self.screen_height - agent.rect.height, initial_y + offset)
+            )
 
     def add_food(self):
         self.food_iteration_count += 1
         if self.food_iteration_count % constants.FOOD_GENERATION_INTERVAL == 0:
-            self.generate_random_food()
+            # self.generate_random_food()
             self.generate_food_near_existing()
 
     def generate_random_food(self):
@@ -210,17 +230,17 @@ class Simulator:
 
         new_foods = []
         for food in self.foods:
-            for dx, dy in directions:
-                x = food.rect.x + dx
-                y = food.rect.y + dy
-                if constants.CENTER_AREA_X_START <= x <= constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE and \
-                constants.CENTER_AREA_Y_START <= y <= constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE:
-                    new_food = Food(x, y, constants.FOOD_SIZE)
-                    if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
-                    not any(new_food.rect.colliderect(f.rect) for f in self.foods):
-                        new_foods.append(new_food)
-                        if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
-                            break
+            dx, dy = random.choice(directions)
+            x = food.rect.x + dx
+            y = food.rect.y + dy
+            if constants.CENTER_AREA_X_START <= x <= constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE and \
+            constants.CENTER_AREA_Y_START <= y <= constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE:
+                new_food = Food(x, y, constants.FOOD_SIZE)
+                if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
+                not any(new_food.rect.colliderect(f.rect) for f in self.foods):
+                    new_foods.append(new_food)
+                    if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
+                        break
             if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
                 break
 
@@ -260,7 +280,7 @@ class Simulator:
     #         self.move_prey(prey)
     #         prey.increment_iteration()  # 增加迭代计数器
 
-    def check_collisions(self,initialdicts):
+    def check_collisions(self):
         # 捕食者和猎物之间的相遇检测
         for predator in self.predators:
             for prey in self.preys:
@@ -298,7 +318,7 @@ class Simulator:
         # prey.prey_list.remove(prey)
     def handle_predator_predator_collision(self, predator1, predator2):
         # 检查是否使用相同的算法
-        if predator1.algorithm == predator2.algorithm:
+        if predator1.algorithm == predator2.algorithm and predator1.born and predator2:
             self.breedPredator(predator1, predator2)
 
     # def breed_predator(self, predator1, predator2):
@@ -317,7 +337,7 @@ class Simulator:
 
     def handle_prey_prey_collision(self, prey1, prey2):
         # 检查是否使用相同的算法
-        if prey1.algorithm == prey2.algorithm:
+        if prey1.algorithm == prey2.algorithm and prey1.born and prey2.born:
 
             self.breedPrey(prey1, prey2)
 

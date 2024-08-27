@@ -23,7 +23,13 @@ import matplotlib.pyplot as plt
 
 
 class LISPredatorPreyEnv(gym.Env):
-    def __init__(self,prey_algorithms =[],pred_algorithms=[],predator_algorithms_predict ={},prey_algorithms_predict={} ):
+    def __init__(
+            self,
+            prey_algorithms =[],
+            pred_algorithms=[],
+            predator_algorithms_predict ={},
+            prey_algorithms_predict={} 
+            ):
         super(LISPredatorPreyEnv, self).__init__()
         
         # 初始化模拟器
@@ -35,50 +41,52 @@ class LISPredatorPreyEnv(gym.Env):
 
         
         # 初始化观察和动作空间
-        self.max_range = max(600, 1000)  
-        self.zero_list = [[0 for _ in range(3)] for _ in range(25)]
-        self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
-        self.new_shape = (self.num_entities, 25, 3)
-        self.obs_low = np.full(self.new_shape, -self.max_range, dtype=np.float32) #inf maybe not the best choice , let us decide later
-        self.obs_high = np.full(self.new_shape, self.max_range, dtype=np.float32)
-        self.action_shape = (self.num_entities,3)
-        self.action_speed_range = max(constants.PREY_MAX_SPEED,constants.PREY_MAX_SPEED)
-        self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
-        self.action_high = np.full(self.action_shape, self.action_speed_range, dtype=np.float32)
-        self.action_low[:, 0] = 0.0   # 将第一列的低值设为0
-        self.action_high[:, 0] = 1.0  # 将第一列的高值设为1
-        # obs_low = np.array([0, 0, 0] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
-        # obs_high = np.array([max_range, max_range, max_range] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
-        # self.observation_space_shape = (constants.NUM_PREDATORS+constants.NUM_PREY) * 3 * 25
-        self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high,dtype=np.float32)
-        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
+        self._initialize_spaces()
 
-        self.interation = 0
-        self.initialnames = []
+        # 初始化算法
         self.prey_algorithms = prey_algorithms
         self.pred_algorithms = pred_algorithms
+        self._initialize_algorithm_encoding()
+
         self.simulator.predator_algorithms_predict = predator_algorithms_predict
         self.simulator.prey_algorithms_predict = prey_algorithms_predict
 
-        # self.initialdicts = {}
-        # 调用 reset 方法初始化环境
-        # self.reset() 
+    def _initialize_spaces(self):
+        """Initialize observation and action spaces."""
+        self.max_range = max(600, 1000)
+        self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
+        self.new_shape = (self.num_entities, 25, 4)
+        self.obs_low = np.full(self.new_shape, -self.max_range, dtype=np.float32)
+        self.obs_high = np.full(self.new_shape, self.max_range, dtype=np.float32)
+        self.action_shape = (self.num_entities, 3)
+        self.action_speed_range = max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
+        self.action_high = np.full(self.action_shape, self.action_speed_range, dtype=np.float32)
+        self.action_low[:, 0] = 0.0
+        self.action_high[:, 0] = 1.0
+        self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high, dtype=np.float32)
+        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
 
-
+    def _initialize_algorithm_encoding(self):
+        """Initialize algorithm encoding."""
+        self.initialnames = []
+        self.prey_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.prey_algorithms))}
+        self.prey_algorithm_encoding["random"] = 1
+        self.pred_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.pred_algorithms))}
+        self.pred_algorithm_encoding["random"] = 1
         
     def reset(self, seed=None, **kwargs):
         # 重置模拟器
         super().reset(seed=seed, **kwargs)
-        self.initialnames = []
+        self.initialnames.clear()
         self.group_map.clear()
-        if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
-        allalgorithms= self.reset_algorithm()
-        all_pred_algorithms, all_prey_algorithms = allalgorithms[:constants.NUM_PREDATORS],allalgorithms[constants.NUM_PREDATORS:]
+        self._set_random_seed(seed)
+
+        # allalgorithms= self.reset_algorithm()
+        all_pred_algorithms, all_prey_algorithms =  self.reset_algorithm()
         self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
-        for agent in self.simulator.preys +self.simulator.predators: 
-            self.initialnames.append(agent.name)
+        
+        self.initialnames.extend(agent.name for agent in self.simulator.preys + self.simulator.predators)
         self.map_agents_to_groups(self.simulator.predators, self.simulator.preys)
         # 初始化环境信息（捕食者、猎物、食物和障碍物）
         for predator in self.simulator.predators:
@@ -103,6 +111,11 @@ class LISPredatorPreyEnv(gym.Env):
 
         # 返回一个数组，符合 observation_space 的定义
         return obs,info
+    def _set_random_seed(self, seed):
+        """Set random seed."""
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
 
     def map_agents_to_groups(self,simPredators,simPreys):
         self.group_map['predators'] = [predator.name for predator in simPredators]
@@ -111,17 +124,19 @@ class LISPredatorPreyEnv(gym.Env):
     def reset_algorithm(self):
 
         all_pred_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREDATORS,self.pred_algorithms)
-        all_prey_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREY,self.prey_algorithms)
+        encoded_all_pred_algorithms = [self.pred_algorithm_encoding[algo] for algo in all_pred_algorithms]
 
-        return all_pred_algorithms + all_prey_algorithms
+        all_prey_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREY,self.prey_algorithms)
+        encoded_all_prey_algorithms = [self.prey_algorithm_encoding[algo] for algo in all_prey_algorithms]
+
+
+        return encoded_all_pred_algorithms ,encoded_all_prey_algorithms
 
     def _set_agent_env(self, agent):
         agent.env_predators = self.simulator.predators
         agent.env_prey = self.simulator.preys
         agent.env_food = self.simulator.foods
         agent.env_obstacles = self.simulator.obstacles
-
-
 
     def step(self, actions):
         new_state, rewards, dones, infos = [], [], [], []
@@ -130,7 +145,7 @@ class LISPredatorPreyEnv(gym.Env):
         self.simulator.move_models(actions =initialdicts)
 
         self.simulator.prey_hunt()
-        self.simulator.check_collisions(initialdicts)
+        self.simulator.check_collisions()
         self.simulator.decrease_health()  # 更新健康值
         self.simulator.remove_dead()  # 清理死亡个体
 
@@ -149,7 +164,7 @@ class LISPredatorPreyEnv(gym.Env):
 
             else:
                 # 如果未找到匹配的 agent，说明该 agent 已死亡
-                new_state.append(np.zeros((25, 3)))
+                new_state.append(np.zeros((25, 4)))
                 rewards.append(0)
                 dones.append(True)
                 infos.append({})
@@ -200,9 +215,6 @@ class LISPredatorPreyEnv(gym.Env):
         # 关闭环境
         pass
 
-
-
-
     def generate_random_actions(self,num_agents, action_space):
         actions = []
         for _ in range(num_agents):
@@ -210,14 +222,6 @@ class LISPredatorPreyEnv(gym.Env):
             # print(action)
             actions.append(action)
         return actions
-
-
-
-
-
-
-
-
 
     def assign_algorithms_to_agents(self,len_agents, algorithm_names):
         """
@@ -388,7 +392,9 @@ if __name__ == "__main__":
     # env = gym.make('LISPredatorPreyEnv-v0')
 
     prey_algorithms = ["PPO","PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+
     pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
+
     # Define the algorithm functions
     def ppo_predator_algorithm(observation_info):
         angle = np.random.uniform(0, 2 * np.pi)
@@ -486,7 +492,12 @@ if __name__ == "__main__":
         "DDPG": dqn_prey_algorithm,
         "random":random_prey_algorithm
     }
-    env = LISPredatorPreyEnv(prey_algorithms=prey_algorithms,pred_algorithms=pred_algorithms,predator_algorithms_predict =predator_algorithms_predict,prey_algorithms_predict =prey_algorithms_predict)
+    env = LISPredatorPreyEnv(
+        prey_algorithms=prey_algorithms,
+        pred_algorithms=pred_algorithms,
+        predator_algorithms_predict =predator_algorithms_predict,
+        prey_algorithms_predict =prey_algorithms_predict
+        )
 
     # Master function to select and run the appropriate algorithm
     check_env(env)
