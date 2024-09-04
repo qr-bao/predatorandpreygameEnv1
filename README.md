@@ -27,15 +27,23 @@ We can also run the game using the `gym_env_refactor.py` and `PPO_gym_env_refact
 ## env abstract
 
 ## env input and output
-    same Preliminary preparation when env initial 
-        length of predator,length of prey, a list of agent algorithm.{like:num_pred = 2,num_prey = 3. [ppo,ddpg,ddpg,ppo,random] }
-        a dict of algorithm function ,like {'ppo':function_ppo,'ddpg':function_ddpg,'random':function_random}
-        for agent be used to training the algorithm(now is all agent if we want to part of agent to training and other agent using different algorithm we can esay change)
-            the agent who can be using to train now only the initial agent now.initial agent get action from RL algorithm
-            observation space  [agent_type, relative_x, relative_y,agent.algorithm]
-            obsercation spce  = (observed_predator[:5]) + (observed_prey[:5]) + (observed_food[:5]) + (observed_obstacle[:5])+(hearning[:5])
-            action space = (self.num_entities, 3)[position_x,position_y,reproduction_intention](reproduction_intention value range:from 0 to 1)
-            done when all agent die or some step 
-            truncated when reached a certain number of steps
-            info 
-            reward now is simple ,if we want to change . override the reward of function of Env()
+- Initial Parameters:
+    - Number of predators and prey, and a list of algorithms for each agent. For example: num_pred = 2, num_prey = 3, and [ppo, ddpg, ddpg, ppo, random].
+    - A dictionary of algorithm functions, such as {'ppo': function_ppo, 'ddpg': function_ddpg, 'random': function_random}.
+
+- Agent Algorithm Assignment:
+    - Agents can be assigned to different algorithms for execution. Currently, all initial agents are trained using RL algorithms, and their springs actions are determined by their algorithms type and a dictionary of algorithm functions set up during the environment initialization. However, we can easily configure the system so that some initial agents are trained while other initial agent operate using different algorithms.
+
+- Observation Space:
+    - The observation space for each agent includes the following: [agent_type, relative_x, relative_y, agent.algorithm].
+    - The full observation space is composed of up to 5 entries from each of the following: observed predators, observed preys, observed foods, observed obstacles, and hearing.
+
+- Action Space:
+    - The action space is structured as (self.num_agents, 3), representing [position_x, position_y, reproduction_intention].
+    - The reproduction_intention value ranges from 0 to 1.
+
+- Termination Criteria:
+    - The episode ends (done) when all agents have died or when a specific step limit is reached (truncated).
+
+- Reward System:
+    - The current reward system is simple, but it can be customized by overriding the reward function in the `Env()` class.
