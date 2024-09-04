@@ -23,17 +23,10 @@ We can also run the game using the `gym_env.py` file, which sets up an environme
 ## Current Multi-Agent Reinforcement Learning Organization
 
 ![Image Description](tools/README.png)
-# 项目细节
-## 环境概述
+# project detail
+## env abstract
 
-## 环境的输入和输出
-### exec mode
-    Preliminary preparation when env initial 
-        length of predator,length of prey, a list of agent algorithm.{like:num_pred = 2,num_prey = 3. [ppo,ddpg,ddpg,ppo,random] }
-        a dict of algorithm function ,like {'ppo':function_ppo,'ddpg':function_ddpg,'random':function_random}
-    env output
-        energy graph 
-### training mode
+## env input and output
     same Preliminary preparation when env initial 
         length of predator,length of prey, a list of agent algorithm.{like:num_pred = 2,num_prey = 3. [ppo,ddpg,ddpg,ppo,random] }
         a dict of algorithm function ,like {'ppo':function_ppo,'ddpg':function_ddpg,'random':function_random}
@@ -46,24 +39,3 @@ We can also run the game using the `gym_env.py` file, which sets up an environme
             truncated when reached a certain number of steps
             info 
             reward now is simple ,if we want to change . override the reward of function of Env()
-            
-
-            
-        算法库
-        输入要训练的agent是哪些（如果这些agent都是初始的还好说，如果游戏过程中的agent也要参与的话，那么怎么等长？如果这样子的话，怎么确定游戏done的结果）
-        输入actions
-    环境的输出
-        obs = reset（）：输出要训练的算法的观察信息
-        step ：输出要训练的算法的信息
-
-
-    模型的输入输出
-        输入obsercation 
-        输出actions
-
-    能量
-        目前的能量是这个样子
-        能量的输入：食物的产生 能量的增长非常简单，每产生一个食物，能量增长一个定值
-        能量的消耗；agent移动带来的和随着时间的消耗 （按照这样的逻辑，agent数量越多消耗越大）捕食能量转移过程中的消耗
-        目前有几个不确定的东西，一个是我们构建的这个能量系统的总体目标是什么，为什么我们要这样设计能量。捕食过程中是否需要存在能量的消耗（predator eat prey ，predator += 1/3 predator。predator=0）
-        
