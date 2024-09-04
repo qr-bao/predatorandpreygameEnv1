@@ -20,8 +20,6 @@ import torch
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-
 class LISPredatorPreyEnv(gym.Env):
     def __init__(
             self,
@@ -31,7 +29,7 @@ class LISPredatorPreyEnv(gym.Env):
             prey_algorithms_predict={} 
             ):
         super(LISPredatorPreyEnv, self).__init__()
-        
+
         # 初始化模拟器
         self.simulator = Simulator(screen_width=3840, screen_height=2160)
         self.group_map = {}
@@ -252,7 +250,7 @@ class LISPredatorPreyEnv(gym.Env):
         for agent, algorithm in zip(agents, algorithms):
             agent.algorithm = algorithm  # 将算法分配给智能体
 
-import matplotlib.pyplot as plt
+
 
 def update_and_plot(iteration, env, data_storage):
     # Count the number of predators, prey, and food

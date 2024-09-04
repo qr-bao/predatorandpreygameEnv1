@@ -33,11 +33,11 @@ class LISPredatorPreyEnv(gym.Env):
 
     def _initialize_spaces(self):
         """Initialize observation and action spaces."""
-        self.max_range = max(600, 1000)
+        self.max_range = max(constants.PREY_HEARING_RANGE, constants.PREDATOR_HEARING_RANGE)
         self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
-        self.new_shape = (self.num_entities, 25, 4)
-        self.obs_low = np.full(self.new_shape, -self.max_range, dtype=np.float32)
-        self.obs_high = np.full(self.new_shape, self.max_range, dtype=np.float32)
+        self.observation_shape = (self.num_entities, 25, 4)
+        self.obs_low = np.full(self.observation_shape, -self.max_range, dtype=np.float32)
+        self.obs_high = np.full(self.observation_shape, self.max_range, dtype=np.float32)
         self.action_shape = (self.num_entities, 3)
         self.action_speed_range = max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
         self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
@@ -234,7 +234,7 @@ def run_random_simulation(env):
     done = False
     iteration = 0
     while not done:
-        env.render()
+        # env.render()
 
         if iteration % 100 == 1:
             update_and_plot(iteration, env, data_storage)
@@ -267,7 +267,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"ppo_predator_algorithm Generated action {action} is out of the action space bounds.")
     def dqn_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
         angle = np.random.uniform(0, 2 * np.pi)
         length = np.random.uniform(0, max_speed)
@@ -279,7 +279,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"dqn_predator_algorithm Generated action {action} is out of the action space bounds.")
     def random_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
         angle = np.random.uniform(0, 2 * np.pi)
         length = np.random.uniform(0, max_speed)
@@ -291,7 +291,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"random_predator_algorithm Generated action {action} is out of the action space bounds.")
     def ppo_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
         angle = np.random.uniform(0, 2 * np.pi)
         length = np.random.uniform(0, max_speed)
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"ppo_prey_algorithm Generated action {action} is out of the action space bounds.")
         
     def dqn_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
         angle = np.random.uniform(0, 2 * np.pi)
@@ -316,7 +316,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"dqn_prey_algorithm Generated action {action} is out of the action space bounds.")
     def random_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
         angle = np.random.uniform(0, 2 * np.pi)
         length = np.random.uniform(0, max_speed)
@@ -328,7 +328,7 @@ if __name__ == "__main__":
         if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
             return action
         else:
-            raise ValueError(f"Generated action {action} is out of the action space bounds.")
+            raise ValueError(f"random_prey_algorithm Generated action {action} is out of the action space bounds.")
 
     predator_algorithms_predict = {
         "PPO": lambda obs: ppo_predator_algorithm(obs, constants.PREY_MAX_SPEED), #change the function to yours ,must have random.

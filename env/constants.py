@@ -41,8 +41,8 @@ PREDATOR_HEALTH_DECAY = 0.05  # 减少健康值衰减速度
 PREY_HEALTH_DECAY = 0.1  # 减少猎物的健康值衰减速度
 HEALTH_RENEW = 0.33
 # 捕食者和猎物的生命值上限
-PREDATOR_MAX_HEALTH = 100  # 增加健康值上限
-PREY_MAX_HEALTH = 50  # 增加健康值上限
+PREDATOR_MAX_HEALTH = float('inf')  # 增加健康值上限
+PREY_MAX_HEALTH = float('inf')  # 增加健康值上限
 
 # 食物属性
 NUM_FOOD = 100  # 增加初始食物数量
@@ -52,11 +52,11 @@ FOOD_HEALTH_GAIN = 4  # 增加食物提供的健康值
 # FOOD_GENERATION_INTERVAL = 80  # 每5秒生成一次食物
 # 新增的常量
 RANDOM_FOOD_PROPORTION = 0.1  # 随机食物的比例
-FOOD_GENERATION_INTERVAL = 45  # 食物生成的迭代间隔
+FOOD_GENERATION_INTERVAL = 450  # 食物生成的迭代间隔
 FOOD_SPAWN_DISTANCE = 55  # 食物生成时的偏移距离
-MAX_FOOD_COUNT = 400  # 食物生成的最大数量
+MAX_FOOD_COUNT = float('inf') # 食物生成的最大数量
 # 捕食相关
-PREDATOR_HEALTH_GAIN_FACTOR = 0.8  # 调整捕食获得的健康值
+PREDATOR_HEALTH_GAIN_FACTOR = 0.66  # 调整捕食获得的健康值
 
 # 游戏速度
 DEFAULT_FPS = 30
