@@ -24,9 +24,7 @@ We can also run the game using the `gym_env_refactor.py` and `PPO_gym_env_refact
 
 ![Image Description](tools/README.png)
 # project detail
-## env abstract
 
-## env input and output
 - Initial Parameters:
     - Number of predators and prey, and a list of algorithms for each agent. For example: num_pred = 2, num_prey = 3, and [ppo, ddpg, ddpg, ppo, random].
     - A dictionary of algorithm functions, such as {'ppo': function_ppo, 'ddpg': function_ddpg, 'random': function_random}.
