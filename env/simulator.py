@@ -24,6 +24,8 @@ class Simulator:
         self.agent_status = {}  # Dictionary to track alive status
         self.predator_algorithms_predict = {}
         self.prey_algorithms_predict = {}
+        self.prey_algorithm_encoding = {}
+        self.pred_algorithm_encoding = {}
 
 
         
@@ -410,7 +412,7 @@ class Simulator:
                 predator.born = born_factor
             else:
                 print("move_models_predator vectoer len not euql 3")
-
+            prey_move_vector = (b, c)
             predator.move_strategy(predator_move_vector)
             predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
             predator.increment_iteration()  # 增加迭代计数器

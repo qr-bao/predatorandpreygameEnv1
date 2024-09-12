@@ -361,13 +361,13 @@ if __name__ == "__main__":
     check_env(env.unwrapped)
     check_env(env)
 
-    model = TD3("MlpPolicy", env, verbose=1)
+    # model = TD3("MlpPolicy", env, verbose=1)
     
     
-    model.learn(total_timesteps=10000)  # 可以根据需求调整时间步数
-    model.save("TD3_predator_prey")
+    # model.learn(total_timesteps=10000)  # 可以根据需求调整时间步数
+    # model.save("algorithms/TD3_predator_prey")
     # 加载训练好的模型
-    model = TD3.load("TD3_predator_prey")
+    model = TD3.load("algorithms/TD3_predator_prey")
 
     # 重置环境
     obs, info = env.reset()

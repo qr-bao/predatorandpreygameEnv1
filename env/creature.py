@@ -9,10 +9,10 @@ class Creature(ABC):
     def __init__(self, x, y, size, color, initial_health, max_health, health_decay, hearing_range):
         self.rect = pygame.Rect(x, y, size, size)
         self.color = color
-        self.original_color = color  # 保存原始颜色
+        self.original_color = color  #  Save original color
         angle = random.uniform(0, 2 * math.pi)
         self.velocity = [math.cos(angle), math.sin(angle)]
-        self.previous_velocity = self.velocity[:]  # 新增的
+        self.previous_velocity = self.velocity[:]  
         self.health = initial_health
         self.max_health = max_health
         self.health_decay = health_decay

@@ -6,7 +6,7 @@ two_parent_folder = os.path.dirname(parent_folder)
 env_folder = os.path.join(two_parent_folder, 'env')  # env 文件夹路径
 
 # 定义要生成的文本文件路径
-output_file = os.path.join(parent_folder, 'combined_python_files.txt')
+output_file = os.path.join(parent_folder, '0905combined_python_files.txt')
 
 # 函数用于读取文件内容并写入到目标文件中
 def append_file_content(file_path, output):

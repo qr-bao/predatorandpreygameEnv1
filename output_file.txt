@@ -1,0 +1,1808 @@
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/gym_env_refactor.py
+import gymnasium as gym
+from gymnasium import spaces
+import pygame
+import numpy as np
+import random
+from env.simulator import Simulator
+import env.constants as constants
+from stable_baselines3.common.env_checker import check_env
+import torch
+import matplotlib.pyplot as plt
+
+
+class LISPredatorPreyEnv(gym.Env):
+    def __init__(self, prey_algorithms=[], pred_algorithms=[], predator_algorithms_predict={}, prey_algorithms_predict={}):
+        super(LISPredatorPreyEnv, self).__init__()
+
+        self.simulator = Simulator(screen_width=3840, screen_height=2160)
+        self.group_map = {}
+        self.current_step = 0
+        self.max_steps = 10_000
+        self.traing_algorithm = ''
+
+        # 初始化观察和动作空间
+        self._initialize_spaces()
+
+        # 初始化算法
+        self.prey_algorithms = prey_algorithms
+        self.pred_algorithms = pred_algorithms
+        self._initialize_algorithm_encoding()
+
+        # self.simulator.predator_algorithms_predict = predator_algorithms_predict
+        # self.simulator.prey_algorithms_predict = prey_algorithms_predict
+        self.simulator.prey_algorithm_encoding = self.prey_algorithm_encoding
+        self.simulator.pred_algorithm_encoding = self.pred_algorithm_encoding
+        self.simulator.predator_algorithms_predict = self.convert_dicts_to_numeric_keys(self.pred_algorithm_encoding,predator_algorithms_predict)
+        self.simulator.prey_algorithms_predict = self.convert_dicts_to_numeric_keys(self.prey_algorithm_encoding,prey_algorithms_predict)
+
+    def _initialize_spaces(self):
+        """Initialize observation and action spaces."""
+        self.max_range = max(constants.PREY_HEARING_RANGE, constants.PREDATOR_HEARING_RANGE)
+        self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
+        self.observation_shape = (self.num_entities, 25, 4)
+        self.obs_low = np.full(self.observation_shape, -self.max_range, dtype=np.float32)
+        self.obs_high = np.full(self.observation_shape, self.max_range, dtype=np.float32)
+        self.action_shape = (self.num_entities, 3)
+        self.action_speed_range = max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
+        self.action_high = np.full(self.action_shape, self.action_speed_range, dtype=np.float32)
+        self.action_low[:, 0] = 0.0
+        self.action_high[:, 0] = 1.0
+        self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high, dtype=np.float32)
+        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
+
+    def _initialize_algorithm_encoding(self):
+        """Initialize algorithm encoding."""
+        self.initialnames = []
+        self.prey_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.prey_algorithms))}
+        self.prey_algorithm_encoding["random"] = 1
+        self.pred_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.pred_algorithms))}
+        self.pred_algorithm_encoding["random"] = 1
+
+    def reset(self, seed=None, **kwargs):
+        """Reset the environment."""
+        super().reset(seed=seed, **kwargs)
+        self.initialnames.clear()
+        self.group_map.clear()
+        self._set_random_seed(seed)
+
+        all_pred_algorithms, all_prey_algorithms = self.reset_algorithm()
+        self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
+
+        self.initialnames.extend(agent.name for agent in self.simulator.preys + self.simulator.predators)
+        self.map_agents_to_groups(self.simulator.predators, self.simulator.preys)
+
+        for predator in self.simulator.predators:
+            self._set_agent_env(predator)
+        for prey in self.simulator.preys:
+            self._set_agent_env(prey)
+
+        obs = np.array([agent.get_observe_info() for group_name in self.group_map.keys() for agent in getattr(self.simulator, group_name)], dtype=np.float32)
+
+        info = {}
+        return obs, info
+
+    def _set_random_seed(self, seed):
+        """Set random seed."""
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
+    def convert_dicts_to_numeric_keys(self,algorithm_encoding, algorithm_predict):
+        """
+        将 algorithm_encoding 中的值作为键映射到 algorithm_predict 中，生成数值键的字典。
+        
+        :param algorithm_encoding: 包含算法名称到数字映射的字典
+        :param algorithm_predict: 包含算法名称到函数的字典
+        :return: 使用数值键的新字典，数值来自 algorithm_encoding 的值
+        """
+        new_algorithm_predict = {}
+
+        # 遍历 algorithm_encoding，重新构建使用数值键的字典
+        for algorithm_name, numeric_key in algorithm_encoding.items():
+            if algorithm_name in algorithm_predict:
+                # 将数值键和对应的算法函数映射到新字典
+                new_algorithm_predict[numeric_key] = algorithm_predict[algorithm_name]
+            else:
+                print(f"Warning: {algorithm_name} not found in algorithm_predict")
+
+        return new_algorithm_predict
+
+    def map_agents_to_groups(self, simPredators, simPreys):
+        """Map agents to their respective groups."""
+        self.group_map['predators'] = [predator.name for predator in simPredators]
+        self.group_map['preys'] = [prey.name for prey in simPreys]
+
+    def reset_algorithm(self):
+        """Assign algorithms to agents and encode them."""
+        all_pred_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREDATORS, self.pred_algorithms)
+        encoded_all_pred_algorithms = [self.pred_algorithm_encoding[algo] for algo in all_pred_algorithms]
+
+        all_prey_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREY, self.prey_algorithms)
+        encoded_all_prey_algorithms = [self.prey_algorithm_encoding[algo] for algo in all_prey_algorithms]
+
+        return encoded_all_pred_algorithms, encoded_all_prey_algorithms
+
+    def _set_agent_env(self, agent):
+        """Set environment properties for the agent."""
+        agent.env_predators = self.simulator.predators
+        agent.env_prey = self.simulator.preys
+        agent.env_food = self.simulator.foods
+        agent.env_obstacles = self.simulator.obstacles
+
+    def step(self, actions):
+        """Execute a step in the environment."""
+        initialdicts = dict(zip(self.initialnames, actions))
+        self.simulator.add_food()
+        self.simulator.move_models(actions=initialdicts)
+        self.simulator.prey_hunt()
+        self.simulator.check_collisions()
+        self.simulator.decrease_health()
+        self.simulator.remove_dead()
+
+        self.current_step += 1
+        truncated = self.current_step >= self.max_steps
+        new_state, rewards, dones, infos = self._process_agents()
+
+        terminated = all(dones)
+        return np.array(new_state, dtype=np.float32), sum(rewards), terminated, truncated, {}
+
+    def _process_agents(self):
+        """Process each agent's state, reward, and done status."""
+        new_state, rewards, dones, infos = [], [], [], []
+        for name in self.initialnames:
+            matching_agent = next((agent for agent in self.simulator.preys + self.simulator.predators if agent.name == name), None)
+            if matching_agent and matching_agent.is_alive:
+                new_state.append(matching_agent.get_observe_info())
+                rewards.append(self._compute_reward(matching_agent))
+                dones.append(False)
+                infos.append({})
+            else:
+                new_state.append(np.zeros((25, 4)))
+                rewards.append(0)
+                dones.append(True)
+                infos.append({})
+        return new_state, rewards, dones, infos
+
+    def _compute_reward(self, agent):
+        # 根据组别计算奖励
+        if agent.type == 'predator':
+            # 捕食者奖励
+            return agent.health if agent.health > 0 else -1.0
+        elif agent.type == 'prey':
+            # 猎物奖励
+            return agent.health if agent.health > 0 else -1.0
+        return 0
+
+    def render(self, mode='human'):
+        """Render the environment."""
+        if not hasattr(self, 'screen'):
+            pygame.init()
+            self.screen = pygame.display.set_mode((self.simulator.screen_width, self.simulator.screen_height)) if mode == 'human' else pygame.Surface((self.simulator.screen_width, self.simulator.screen_height))
+
+        self.screen.fill((0, 0, 0))
+        self.simulator.draw_models(self.screen)
+        pygame.display.flip() if mode == 'human' else self._get_rgb_array()
+
+    def _get_rgb_array(self):
+        """Get the RGB array from the Pygame surface."""
+        return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+
+    def close(self):
+        """Close the environment."""
+        pass
+
+    def assign_algorithms_to_agents(self, len_agents, algorithm_names):
+        """Assign algorithms to agents."""
+        return [algorithm_names[i] if i < len(algorithm_names) else 'random' for i in range(len_agents)]
+
+
+def update_and_plot(iteration, env, data_storage):
+    """Update data and plot results."""
+    predator_count = len(env.simulator.predators)
+    prey_count = len(env.simulator.preys)
+    food_count = len(env.simulator.foods)
+
+    predator_total_health = sum(predator.health for predator in env.simulator.predators)
+    prey_total_health = sum(prey.health for prey in env.simulator.preys)
+    food_total_health = len(env.simulator.foods) * constants.FOOD_HEALTH_GAIN
+    total_energy = predator_total_health + prey_total_health + food_total_health
+
+    data_storage['iterations'].append(iteration)
+    data_storage['predator_counts'].append(predator_count)
+    data_storage['prey_counts'].append(prey_count)
+    data_storage['total_counts'].append(predator_count + prey_count)
+    data_storage['predator_healths'].append(predator_total_health)
+    data_storage['prey_healths'].append(prey_total_health)
+    data_storage['total_healths'].append(total_energy)
+
+    plt.clf()
+
+    plt.subplot(2, 1, 1)
+    plt.plot(data_storage['iterations'], data_storage['predator_counts'], label='Predator Count')
+    plt.plot(data_storage['iterations'], data_storage['prey_counts'], label='Prey Count')
+    plt.plot(data_storage['iterations'], data_storage['total_counts'], label='total Count')
+    plt.xlabel('Iteration')
+    plt.ylabel('Count')
+    plt.title('Number of Predators, Prey, and total Over Time')
+    plt.legend()
+
+    plt.subplot(2, 1, 2)
+    plt.plot(data_storage['iterations'], data_storage['predator_healths'], label='Predator Total Health')
+    plt.plot(data_storage['iterations'], data_storage['prey_healths'], label='Prey Total Health')
+    plt.plot(data_storage['iterations'], data_storage['total_healths'], label=' Total Health')
+    plt.xlabel('Iteration')
+    plt.ylabel('Total Health')
+    plt.title('')
+    plt.legend()
+
+    plt.pause(0.01)  # Pause to update the plot in real-time
+
+
+def run_random_simulation(env):
+    """Run a random simulation with the environment."""
+    obs, info = env.reset()
+
+    data_storage = {
+        'iterations': [],
+        'predator_counts': [],
+        'prey_counts': [],
+        'total_counts': [],
+        'predator_healths': [],
+        'prey_healths': [],
+        'total_healths': []
+    }
+
+    plt.figure(figsize=(10, 8))
+    plt.ion()
+    done = False
+    iteration = 0
+    while not done:
+        env.render()
+
+        if iteration % 100 == 1:
+            update_and_plot(iteration, env, data_storage)
+            print(len(env.simulator.predators),end="\t")
+            print(len(env.simulator.preys))
+
+        actions = env.action_space.sample()
+        new_state, rewards, done, truncated, infos = env.step(actions)
+        iteration += 1
+
+        if iteration % 100 == 1:
+            pass
+
+    plt.ioff()
+    plt.show()
+
+
+if __name__ == "__main__":
+    prey_algorithms = ["PPO", "PPO", "PPO", "PPO", "DDPG", "DDPG", "DDPG"]
+    pred_algorithms = ["PPO", "PPO", "PPO", "DDPG", "DDPG", "DDPG"]
+
+    def ppo_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"ppo_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def dqn_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"dqn_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def random_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"random_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def ppo_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"ppo_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def dqn_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"dqn_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def random_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        angle = np.random.uniform(0, 2 * np.pi)
+        length = np.random.uniform(0, max_speed)
+        a = np.random.uniform(0, 1)
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        # 检查生成的动作是否符合定义的动作空间
+        action = np.array([a, x, y], dtype=np.float32)
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"random_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+
+    predator_algorithms_predict = {
+        "PPO": lambda obs: ppo_predator_algorithm(obs, constants.PREY_MAX_SPEED), #change the function to yours ,must have random.
+        "DDPG": lambda obs: dqn_predator_algorithm(obs, constants.PREY_MAX_SPEED),
+        "random": lambda obs: random_predator_algorithm(obs, constants.PREY_MAX_SPEED)
+    }
+
+    prey_algorithms_predict = {
+        "PPO": lambda obs: ppo_prey_algorithm(obs, constants.PREY_MAX_SPEED),
+        "DDPG": lambda obs: dqn_prey_algorithm(obs, constants.PREY_MAX_SPEED),
+        "random": lambda obs: random_prey_algorithm(obs, constants.PREY_MAX_SPEED)
+    }
+
+    env = LISPredatorPreyEnv(
+        prey_algorithms=prey_algorithms,
+        pred_algorithms=pred_algorithms,
+        predator_algorithms_predict=predator_algorithms_predict,
+        prey_algorithms_predict=prey_algorithms_predict
+    )
+
+    check_env(env)
+    run_random_simulation(env)
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/creature.py
+# creature.py
+import pygame
+import random
+import math
+import env.constants as constants
+from abc import ABC, abstractmethod
+import numpy as np
+class Creature(ABC):
+    def __init__(self, x, y, size, color, initial_health, max_health, health_decay, hearing_range):
+        self.rect = pygame.Rect(x, y, size, size)
+        self.color = color
+        self.original_color = color  #  Save original color
+        angle = random.uniform(0, 2 * math.pi)
+        self.velocity = [math.cos(angle), math.sin(angle)]
+        self.previous_velocity = self.velocity[:]  
+        self.health = initial_health
+        self.max_health = max_health
+        self.health_decay = health_decay
+        self.sight_range = 200  # 初始值
+        self.sight_angle = math.pi / 3  # 可视角度
+        self.hearing_range = hearing_range  # 听觉范围
+        self.selected = False  # 新增的
+        self.iteration_counter = 0  # 新增的迭代计数器
+        self.is_alive = True
+        self.born = True
+        
+    
+    def increment_iteration(self):
+        self.iteration_counter += 1
+    
+    def draw_sight_range(self, screen):
+        end_x = self.rect.centerx + self.sight_range * math.cos(math.atan2(self.velocity[1], self.velocity[0]))
+        end_y = self.rect.centery + self.sight_range * math.sin(math.atan2(self.velocity[1], self.velocity[0]))
+        pygame.draw.line(screen, (255, 255, 0), self.rect.center, (end_x, end_y), 1)  # 画出视觉范围线
+        pygame.draw.arc(screen, (255, 255, 0), (self.rect.centerx - self.sight_range, self.rect.centery - self.sight_range, 2 * self.sight_range, 2 * self.sight_range), 
+                        math.atan2(self.velocity[1], self.velocity[0]) - self.sight_angle / 2, 
+                        math.atan2(self.velocity[1], self.velocity[0]) + self.sight_angle / 2, 1)  # 画出视觉范围弧线
+
+    def draw_hearing_range(self, screen):
+        pygame.draw.circle(screen, (128, 128, 128), self.rect.center, self.hearing_range, 1)  # 画出听觉范围
+
+    def highlight_targets(self, screen, observed_predators, observed_preys, observed_foods, observed_obstacles):
+        # print(observed_preys)
+        for observed_predator in observed_predators:
+            observed_predator.color = (255, 255, 0)  # 高亮捕食者
+        for observed_prey in observed_preys:
+            observed_prey.color = (0, 0, 255)  # 高亮猎物
+        for observed_food in observed_foods:
+            observed_food.color = (255, 0, 0)  # 高亮食物
+        for observed_obstacle in observed_obstacles:
+            pygame.draw.rect(screen, (255, 255, 255), observed_obstacle.rect, 2)  # 高亮障碍物框架
+
+    def reset_color(self):
+        self.color = self.original_color  # 重置颜色
+
+    @classmethod
+    def reset_all_colors(cls, creatures):
+        for creature in creatures:
+            creature.reset_color()
+
+    # def move(self, control_panel_width, screen_width, screen_height, obstacles):
+    #     # 保存原始位置
+    #     original_position = self.rect.topleft
+
+    #     # 子类具体实现移动策略
+    #     # self.move_strategy()
+
+    #     # # 碰撞检测，防止小方块移出游戏空间
+    #     # if self.rect.left < control_panel_width or self.rect.right > screen_width:
+    #     #     self.velocity[0] = -self.velocity[0]
+    #     # if self.rect.top < 0 or self.rect.bottom > screen_height:
+    #     #     self.velocity[1] = -self.velocity[1]
+    #     # 碰撞检测，防止小方块移出游戏空间
+    #     if self.rect.left < control_panel_width:
+    #         self.rect.left = control_panel_width
+    #         self.velocity[0] = -self.velocity[0]
+    #     elif self.rect.right > screen_width:
+    #         self.rect.right = screen_width
+    #         self.velocity[0] = -self.velocity[0]
+
+    #     if self.rect.top < 0:
+    #         self.rect.top = 0
+    #         self.velocity[1] = -self.velocity[1]
+    #     elif self.rect.bottom > screen_height:
+    #         self.rect.bottom = screen_height
+    #         self.velocity[1] = -self.velocity[1]
+    #     # 检查是否与障碍物碰撞
+    #     if any(self.rect.colliderect(obs.rect) for obs in obstacles):
+    #         # 如果碰撞，恢复到原始位置并反转速度
+    #         self.rect.topleft = original_position
+    #         self.velocity[0] = -self.velocity[0]
+    #         self.velocity[1] = -self.velocity[1]
+
+
+
+    def move(self, control_panel_width, screen_width, screen_height, obstacles):
+        # 保存原始位置
+        original_position = self.rect.topleft
+        
+        # 计算预期的新位置
+        new_position = self.rect.move(self.velocity[0], self.velocity[1])
+        
+        # 检测是否即将移出游戏空间并修正位置和速度
+        if new_position.left < control_panel_width:
+            new_position.left = control_panel_width
+            self.velocity[0] = 0  # 停止水平移动
+        elif new_position.right > screen_width:
+            new_position.right = screen_width
+            self.velocity[0] = 0
+
+        if new_position.top < 0:
+            new_position.top = 0
+            self.velocity[1] = 0  # 停止垂直移动
+        elif new_position.bottom > screen_height:
+            new_position.bottom = screen_height
+            self.velocity[1] = 0
+        
+        # 更新位置
+        self.rect = new_position
+        
+        # 检查是否与障碍物碰撞
+        for obs in obstacles:
+            if self.rect.colliderect(obs.rect):
+                # 碰撞处理：计算滑动矢量
+                overlap_x = min(self.rect.right - obs.rect.left, obs.rect.right - self.rect.left)
+                overlap_y = min(self.rect.bottom - obs.rect.top, obs.rect.bottom - self.rect.top)
+                
+                if overlap_x < overlap_y:
+                    # 水平碰撞：沿障碍物的表面滑动
+                    if self.velocity[0] > 0:
+                        self.rect.right = obs.rect.left
+                    else:
+                        self.rect.left = obs.rect.right
+                    self.velocity[0] = 0  # 停止水平移动
+                else:
+                    # 垂直碰撞：沿障碍物的表面滑动
+                    if self.velocity[1] > 0:
+                        self.rect.bottom = obs.rect.top
+                    else:
+                        self.rect.top = obs.rect.bottom
+                    self.velocity[1] = 0  # 停止垂直移动
+
+    def to_relative_coordinates(self,target):
+        # 计算相对于agent的dx, dy
+        dx = target.rect.centerx - self.rect.centerx
+        dy = target.rect.centery - self.rect.centery
+        
+        # 计算相对角度，将北方向（y轴正方向）对齐到agent的移动方向
+        relative_angle = math.atan2(dy, dx) - math.atan2(self.velocity[1], self.velocity[0])
+        
+        # 将角度标准化到[-pi, pi]
+        relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi
+        
+        # 将相对坐标转换到agent的参考系
+        distance = math.sqrt(dx**2 + dy**2)
+        relative_x = distance * math.sin(relative_angle)
+        relative_y = distance * math.cos(relative_angle)
+        
+        return relative_x, relative_y
+    # def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
+    #     def is_in_sight(target):
+    #         dx = target.rect.centerx - self.rect.centerx
+    #         dy = target.rect.centery - self.rect.centery
+    #         distance = math.sqrt(dx**2 + dy**2)
+    #         angle_to_target = math.atan2(dy, dx)
+    #         relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
+    #         relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
+    #         return (distance <= self.sight_range) and (abs(relative_angle) <= self.sight_angle / 2)
+
+    #     def is_occluded(target, obstacles):
+    #         for obstacle in obstacles:
+    #             if self.rect.colliderect(obstacle.rect):
+    #                 continue
+    #             if self.line_intersects_rect((self.rect.centerx, self.rect.centery), (target.rect.centerx, target.rect.centery), obstacle.rect):
+    #                 return True
+    #         return False
+    #     def to_relative_coordinates(target):
+    #         # 计算相对于agent的dx, dy
+    #         relative_x = target.rect.centerx - self.rect.centerx
+    #         relative_y = target.rect.centery - self.rect.centery
+            
+    #         return relative_x, relative_y
+    #     def find_first_visible(targets, obstacles):
+    #         visible_targets = sorted(targets, key=lambda t: self.distance_to(t))
+    #         visible_list = []
+    #         for target in visible_targets:
+    #             if is_in_sight(target) and not is_occluded(target, obstacles):
+    #                 relative_x, relative_y = to_relative_coordinates(target)
+    #                 visible_list.append(
+    #                 {
+    #                     'type': target.__class__.__name__,
+    #                     'relative_x': relative_x,
+    #                     'relative_y': relative_y,
+    #                 }
+                
+    #                 )
+    #         return visible_list if visible_list else None
+
+    #     def is_in_hearing_range(target):
+    #         dx = target.rect.centerx - self.rect.centerx
+    #         dy = target.rect.centery - self.rect.centery
+    #         distance = math.sqrt(dx**2 + dy**2)
+    #         return distance <= self.hearing_range
+
+    #     def get_sound_intensity(target):
+    #         dx = target.rect.centerx - self.rect.centerx
+    #         dy = target.rect.centery - self.rect.centery
+    #         distance = math.sqrt(dx**2 + dy**2)
+    #         return max(0, (self.hearing_range - distance) / self.hearing_range)
+
+    #     def get_sound_direction(target):
+    #         dx = target.rect.centerx - self.rect.centerx
+    #         dy = target.rect.centery - self.rect.centery
+    #         angle_to_target = math.atan2(dy, dx)
+    #         relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
+    #         relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
+    #         return relative_angle
+    #     left_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1)]
+    #     right_boundary = [(constants.SCREEN_WIDTH1, 0), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
+    #     top_boundary = [(constants.CONTROL_PANEL_WIDTH, 0), (constants.SCREEN_WIDTH1, 0)]
+    #     bottom_boundary = [(constants.CONTROL_PANEL_WIDTH, constants.SCREEN_HEIGHT1), (constants.SCREEN_WIDTH1, constants.SCREEN_HEIGHT1)]
+    #     visible_boundaries = []
+
+    #     # for boundary in [left_boundary, right_boundary, top_boundary, bottom_boundary]:
+    #     #     observed_mid_boundary = is_boundary_in_sight(boundary[0], boundary[1])
+    #     # 视觉感知
+    #     observed_predator = find_first_visible(env_predators, env_obstacles)
+    #     observed_prey = find_first_visible(env_prey, env_obstacles)
+    #     observed_food = find_first_visible(env_food, env_obstacles)
+    #     observed_obstacle = find_first_visible(env_obstacles, env_obstacles)
+
+
+    #     # 听觉感知
+    #     heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
+    #     heard_sounds = [
+    #         {
+    #             'type': entity.__class__.__name__,
+    #             'intensity': get_sound_intensity(entity),
+    #             'direction': get_sound_direction(entity)
+    #         } for entity in heard_entities
+    #     ]
+        
+    #     return observed_predator, observed_prey, observed_food, observed_obstacle, heard_sounds
+    def observe_info(self, env_predators, env_prey, env_food, env_obstacles):
+        def process_matrix(matrix, target_shape=(5, 4)):
+            """
+            裁剪或填充矩阵，使其保持 target_shape 的大小。
+
+            参数:
+            - matrix: 输入的矩阵，形状为 (N, 3)
+            - target_shape: 目标形状，默认为 (5, 3)
+
+            返回:
+            - 处理后的矩阵，形状为 target_shape
+            """
+            if not matrix:
+                # 如果矩阵为空，直接填充目标大小的零矩阵
+                return [[0] * target_shape[1] for _ in range(target_shape[0])]
+            current_rows = len(matrix)
+            current_cols = len(matrix[0]) if current_rows > 0 else 0
+
+            # 确保输入矩阵的列数正确
+            assert current_cols == target_shape[1], f"输入矩阵的列数应为 {target_shape[1]}，但得到了 {current_cols}"
+
+            # 如果当前矩阵行数大于目标行数，则进行裁剪
+            if current_rows > target_shape[0]:
+                processed_matrix = matrix[:target_shape[0]]
+            # 如果当前矩阵行数小于目标行数，则进行填充
+            elif current_rows < target_shape[0]:
+                processed_matrix = matrix[:]
+                padding_rows = target_shape[0] - current_rows
+                padding = [[0] * target_shape[1]] * padding_rows
+                processed_matrix.extend(padding)
+            else:
+                processed_matrix = matrix
+
+            return processed_matrix
+        def is_in_sight(target):
+            dx = target.rect.centerx - self.rect.centerx
+            dy = target.rect.centery - self.rect.centery
+            distance = math.sqrt(dx**2 + dy**2)
+            angle_to_target = math.atan2(dy, dx)
+            relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
+            relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
+            return (distance <= self.sight_range) and (abs(relative_angle) <= self.sight_angle / 2)
+
+        def is_occluded(target, obstacles):
+            for obstacle in obstacles:
+                if self.rect.colliderect(obstacle.rect):
+                    continue
+                if self.line_intersects_rect((self.rect.centerx, self.rect.centery), (target.rect.centerx, target.rect.centery), obstacle.rect):
+                    return True
+            return False
+
+        def to_relative_coordinates(target):
+            # 计算相对于agent的dx, dy
+            relative_x = target.rect.centerx - self.rect.centerx
+            relative_y = target.rect.centery - self.rect.centery
+            return relative_x, relative_y
+
+        def find_first_visible(targets, obstacles, type_id):
+            visible_targets = sorted(targets, key=lambda t: self.distance_to(t))
+            visible_list = []
+            for target in visible_targets:
+                if is_in_sight(target) and not is_occluded(target, obstacles):
+                    relative_x, relative_y = to_relative_coordinates(target)
+                    if hasattr(target, 'algorithm'):
+                        visible_list.append([type_id, relative_x, relative_y,target.algorithm])
+                    else:
+                        visible_list.append([type_id, relative_x, relative_y,0])
+                    # visible_list = process_matrix(visible_list)
+            return visible_list
+
+        def is_in_hearing_range(target):
+            dx = target.rect.centerx - self.rect.centerx
+            dy = target.rect.centery - self.rect.centery
+            distance = math.sqrt(dx**2 + dy**2)
+            return distance <= self.hearing_range
+
+        def get_sound_intensity(target):
+            dx = target.rect.centerx - self.rect.centerx
+            dy = target.rect.centery - self.rect.centery
+            distance = math.sqrt(dx**2 + dy**2)
+            return max(0, (self.hearing_range - distance) / self.hearing_range)
+
+        def get_sound_direction(target):
+            dx = target.rect.centerx - self.rect.centerx
+            dy = target.rect.centery - self.rect.centery
+            angle_to_target = math.atan2(dy, dx)
+            relative_angle = angle_to_target - math.atan2(self.velocity[1], self.velocity[0])
+            relative_angle = (relative_angle + math.pi) % (2 * math.pi) - math.pi  # 将角度限制在 [-pi, pi]
+            return relative_angle
+
+        # 收集视觉信息
+        observed_predator = find_first_visible(env_predators, env_obstacles, 1)
+        observed_prey = find_first_visible(env_prey, env_obstacles, 2)
+        observed_food = find_first_visible(env_food, env_obstacles, 3)
+        observed_obstacle = find_first_visible(env_obstacles, env_obstacles, 4)
+
+        # 汇总所有视觉信息
+        other_data = process_matrix(observed_predator) + process_matrix(observed_prey) + process_matrix(observed_food) + process_matrix(observed_obstacle)
+        # other_data = process_matrix(other_data)
+        # 收集听觉信息
+        heard_entities = [entity for entity in env_predators + env_prey if is_in_hearing_range(entity)]
+        sounds = [
+            [9, get_sound_intensity(entity), get_sound_direction(entity),0]
+            for entity in heard_entities
+        ]
+        sounds =process_matrix(sounds)
+        # print(np.shape(other_data),np.shape(sounds),np.shape(other_data+sounds))
+        ob_env = other_data+sounds
+        # print(np.shape(other_data),np.shape(sounds))
+        # print(np.shape(ob_env))
+
+
+        return np.array(ob_env)
+        # return np.array(other_data), np.array(sounds)
+
+    def distance_to(self, other):
+        dx = other.rect.centerx - self.rect.centerx
+        dy = other.rect.centery - self.rect.centery
+        return (dx ** 2 + dy ** 2) ** 0.5
+
+    def line_intersects_rect(self, p1, p2, rect):
+        lines = [
+            ((rect.left, rect.top), (rect.right, rect.top)),
+            ((rect.right, rect.top), (rect.right, rect.bottom)),
+            ((rect.right, rect.bottom), (rect.left, rect.bottom)),
+            ((rect.left, rect.bottom), (rect.left, rect.top))
+        ]
+        for line in lines:
+            if self.lines_intersect(p1, p2, line[0], line[1]):
+                return True
+        return False
+
+    def lines_intersect(self, p1, p2, p3, p4):
+        def ccw(A, B, C):
+            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+
+        return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
+
+    @abstractmethod
+    def move_strategy(self):
+        pass
+
+    @abstractmethod
+    def get_target(self, observed_predator, observed_prey, observed_food, observed_obstacle):
+        pass
+
+    def update_health(self):
+        self.health -= self.health_decay
+        if self.health <= 0:
+            self.health = 0
+            self.is_alive = False
+        elif self.health > self.max_health:
+            self.health = self.max_health
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
+
+    # def is_dead(self):
+    #     return self.health <= 0
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/predator.py
+import math
+from env.creature import Creature
+import env.constants as constants
+import random
+import numpy as np
+class Predator(Creature):
+    def __init__(self, x, y, size,name="pred",algorithm = "initalrandom"):
+        super().__init__(x, y, size, (128,128,128), constants.PREDATOR_INITIAL_HEALTH, constants.PREDATOR_MAX_HEALTH, constants.PREDATOR_HEALTH_DECAY, constants.PREDATOR_HEARING_RANGE)
+        self.sight_range = constants.PREDATOR_SIGHT_RANGE  # 使用新的视觉范围
+        self.prey_list = []
+        self.name = name
+        self.type = 'predator'
+        self.algorithm = algorithm
+    #     self.log()
+    # def log(self):
+    #     print(self.name,end="    ")
+    #     print(self.algorithm)
+
+    def draw(self, screen):
+        self.reset_color()  # 重置颜色
+        super().draw(screen)
+        if self.selected:  # 如果被选中，显示视觉和听觉范围
+            self.draw_sight_range(screen)
+            self.draw_hearing_range(screen)
+            other_data = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+
+            # # 解析矩阵，分别处理视距内的捕食者、猎物、食物和障碍物
+            # observed_predator = [item for item in other_data if item[0] == 1]  # 捕食者
+            # observed_prey = [item for item in other_data if item[0] == 2]  # 猎物
+            # observed_food = [item for item in other_data if item[0] == 3]  # 食物
+            # observed_obstacle = [item for item in other_data if item[0] == 4]  # 障碍物
+            # self.highlight_targets(screen, observed_predator, observed_prey, observed_food, observed_obstacle)
+
+    def set_prey_list(self, prey_list):
+        self.prey_list = prey_list
+    def get_observe_info(self):
+        ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        return ob_env
+
+    def move_strategy(self,move_vector):
+        Creature.reset_all_colors(self.env_predators + self.env_prey)
+        # ob_env = self.get_observe_info()
+        # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        move_vector = move_vector
+
+        # 更新速度部分
+        self.previous_velocity = self.velocity[:]
+        self.velocity[0] += move_vector[0]  # 更新 x 方向的速度
+        self.velocity[1] += move_vector[1]  # 更新 y 方向的速度
+
+        # 限制速度
+        speed = math.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2)
+        if speed > constants.PREDATOR_MAX_SPEED:
+            self.velocity[0] = (self.velocity[0] / speed) * constants.PREDATOR_MAX_SPEED
+            self.velocity[1] = (self.velocity[1] / speed) * constants.PREDATOR_MAX_SPEED
+
+        # 避免速度归零
+        if self.velocity[0] == 0 and self.velocity[1] == 0:
+            self.velocity = [random.choice([-1, 1]), random.choice([-1, 1])]
+
+        # 移动 Predator
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+
+    def get_target(self, ob_env):
+        move_vector = [0, 0]
+
+        observed_prey = [item for item in ob_env if item[0] == 2]
+        observed_food = [item for item in ob_env if item[0] == 3]
+        sounds = [item for item in ob_env if item[0] == 9]
+        if observed_prey:
+            # 靠近猎物并加速
+            closest_prey = min(observed_prey, key=lambda prey: math.sqrt(prey[1]**2 + prey[2]**2))
+            dx = closest_prey[1]
+            dy = closest_prey[2]
+            dist = math.sqrt(dx**2 + dy**2)
+            
+            if dist > 0:  # 检查距离是否为零
+                move_vector[0] += (dx / dist) * constants.PREDATOR_ACCELERATION_FACTOR
+                move_vector[1] += (dy / dist) * constants.PREDATOR_ACCELERATION_FACTOR
+
+        elif observed_food:
+            # 靠近食物
+            closest_food = min(observed_food, key=lambda food: math.sqrt(food[1]**2 + food[2]**2))
+            dx = closest_food[1]
+            dy = closest_food[2]
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:  # 检查距离是否为零
+                move_vector[0] += dx / dist
+                move_vector[1] += dy / dist
+
+        else:
+            # 停下来并旋转观察周围
+            if random.random() < constants.PREDATOR_ROTATION_CHANCE:
+                angle = random.uniform(-math.pi, math.pi)
+                move_vector[0] = math.cos(angle) * constants.PREDATOR_ROTATION_SPEED
+                move_vector[1] = math.sin(angle) * constants.PREDATOR_ROTATION_SPEED
+            else:
+                move_vector[0] = 0
+                move_vector[1] = 0
+
+        # 利用听觉信息来影响移动策略
+        for sound in sounds:
+            sound_intensity = sound[1]
+            sound_direction = sound[2]
+            move_vector[0] += sound_intensity * math.cos(sound_direction)
+            move_vector[1] += sound_intensity * math.sin(sound_direction)
+        born_factor = np.random.uniform(0, 1)
+        move_vector = [born_factor,move_vector[0],move_vector[1]]
+
+        return move_vector
+    def hunt_prey(self, prey_list):
+        for prey in prey_list:
+            if self.rect.colliderect(prey.rect):
+                self.health += prey.health * constants.PREDATOR_HEALTH_GAIN_FACTOR
+                if self.health > self.max_health:
+                    self.health = self.max_health
+                prey.health = 0  # 猎物死亡
+                prey_list.remove(prey)
+                return
+
+    def crossbreed(self, other,name):
+        child_x = (self.rect.x + other.rect.x) // 2
+        child_y = (self.rect.y + other.rect.y) // 2
+        # name = f"Pred{self.algorithm}_{next_pred_id}"  # 使用全局唯一ID生成名称
+        child = Predator(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=self.algorithm)
+        
+        return child
+
+    def mutate(self):
+        self.velocity[0] = random.choice([-1, 1])
+        self.velocity[1] = random.choice([-1, 1])
+
+    def update_health(self):
+        # 基础的健康值减少
+        health_decay = self.health_decay   # 将捕食者的生命值减少速度设置为猎物的两倍
+
+        # 根据速度变化计算加速度
+        accel_x = self.velocity[0] - self.previous_velocity[0]
+        accel_y = self.velocity[1] - self.previous_velocity[1]
+        acceleration = math.sqrt(accel_x ** 2 + accel_y ** 2)
+        
+        # 根据加速度计算额外的健康值减少
+        health_decay += acceleration * constants.PREDATOR_ACCELERATION_HEALTH_DECAY_FACTOR
+        self.health -= health_decay
+
+        if self.health <= 0:
+            self.health = 0
+            self.is_alive = False
+        elif self.health > self.max_health:
+            self.health = self.max_health
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/constants.py
+# constants.py
+
+# # window setting
+# SCREEN_WIDTH = 1600
+# SCREEN_HEIGHT = 900
+
+SCREEN_WIDTH1 = 3840
+SCREEN_HEIGHT1 = 2160
+# Control bar and game space width
+CONTROL_PANEL_WIDTH = 400
+
+# Button properties
+BUTTON_COLOR = (0, 255, 0)
+BUTTON_HOVER_COLOR = (255, 0, 0)
+BUTTON_WIDTH = 150
+BUTTON_HEIGHT = 50
+BUTTON_MARGIN = 20
+
+# Font settings
+FONT_SIZE = 36
+BUTTON_TEXTS = ["Start Game", "Button 2", "Button 3", "Slow Down"]
+
+# Added a new constant to define the central 75% range of food generation
+CENTER_AREA_WIDTH = int((SCREEN_WIDTH1 -CONTROL_PANEL_WIDTH)*0.75 )
+CENTER_AREA_HEIGHT = int(SCREEN_HEIGHT1 * 0.75)
+CENTER_AREA_X_START = int(CONTROL_PANEL_WIDTH+(SCREEN_WIDTH1-CONTROL_PANEL_WIDTH-CENTER_AREA_WIDTH)//2) 
+CENTER_AREA_Y_START = int((SCREEN_HEIGHT1-CENTER_AREA_HEIGHT)//2)
+# game state
+MAIN_MENU = 0
+IN_GAME = 1
+
+# number of agent
+NUM_PREDATORS =30  # 捕食者初始数量
+NUM_PREY = 20 # 猎物初始数量
+BLOCK_SIZE = 30
+
+# Predator and prey health and health decay
+PREDATOR_INITIAL_HEALTH = 45  # Increase initial health
+PREY_INITIAL_HEALTH = 20  # Increase initial health
+PREDATOR_HEALTH_DECAY = 0.05  # Reduce health decay rate
+PREY_HEALTH_DECAY = 0.1  # Reduces the speed at which prey’s health decays
+HEALTH_RENEW = 0.33
+# Predator and prey health caps
+PREDATOR_MAX_HEALTH = float('inf')  # Increase health limit
+PREY_MAX_HEALTH = float('inf')  # Increase health limit
+
+# 食物属性
+NUM_FOOD = 100  # Increase initial food quantity
+FOOD_SIZE = 20
+FOOD_COLOR = (0, 0, 255)
+FOOD_HEALTH_GAIN = 4  #Increase the health value provided by food
+#FOOD_GENERATION_INTERVAL = 80 # Generate food every 5 seconds
+#New constants
+RANDOM_FOOD_PROPORTION = 0.1  # proportion of random food
+FOOD_GENERATION_INTERVAL = 450  # Iteration interval for food generation
+FOOD_SPAWN_DISTANCE = 55  #The offset distance when food is generated
+MAX_FOOD_COUNT = float('inf') # The maximum amount of food generated
+# Predation related
+PREDATOR_HEALTH_GAIN_FACTOR = 0.66  #Adjust health gained from preying
+
+# Adjust health gained from preying
+DEFAULT_FPS = 30
+SLOW_FPS = 10
+
+# Genetic algorithm related
+MUTATION_CHANCE = 0.01  # 增加突变几率
+PREY_REPRODUCTION_PROBABILITY = 0.2
+PREDATOR_REPRODUCTION_PROBABILITY = 0.2
+PREDATOR_SPEED = 5
+
+# speed and acceleration
+PREY_MAX_SPEED = 10 
+PREY_MAX_ACCELERATION = 2.5
+PREY_MAX_TURNING_ANGLE = 0.5
+
+PREDATOR_MAX_SPEED = 10 
+PREDATOR_MAX_ACCELERATION = 4
+PREDATOR_MAX_TURNING_ANGLE = 0.8
+
+# hearing range
+PREDATOR_HEARING_RANGE = 800
+PREY_HEARING_RANGE = 800
+max_observation_count = 5
+max_hearing_count = 5
+
+# Health value reduction related constants
+PREDATOR_ACCELERATION_HEALTH_DECAY_FACTOR = 0.02# Reduce health decay caused by acceleration
+PREY_ACCELERATION_HEALTH_DECAY_FACTOR = 0.10  # Reduce health decay caused by acceleration
+
+#  New constants
+PREDATOR_MIN_DISTANCE = 10  #Predator minimum approach distance
+PREDATOR_ROTATION_CHANCE = 0.05  # Reduce the chance of stopping and spinning
+PREDATOR_ROTATION_SPEED = 1  # rotation speed
+PREDATOR_ACCELERATION_FACTOR = 9.2  # Adjusted Predator acceleration factor
+
+PREY_EVASION_FACTOR = 2.5  # Increased predator protection factor
+PREY_RANDOM_MOVE_CHANCE = 0.05  # Reduce the chance of random movement
+PREY_RANDOM_MOVE_SPEED = 1.5  # random movement speed
+PREY_TURN_INTERVAL = 50  #Increase the interval (number of frames) of regular look back and observe
+
+#visual range
+PREDATOR_SIGHT_RANGE = 600  #Adjust Predator's visual range
+PREY_SIGHT_RANGE = 600  #Adjust the visual range of prey
+
+#Maximum number of iterations
+MAX_ITERATIONS = 10000  #Set to a reasonable value to control runtime
+
+#Minimum health required to reproduce
+PREDATOR_MIN_HEALTH_FOR_REPRODUCTION = PREDATOR_INITIAL_HEALTH * 0.5
+PREY_MIN_HEALTH_FOR_REPRODUCTION = PREY_INITIAL_HEALTH * 0.5
+
+#Breed iteration counter threshold
+PREY_REPRODUCTION_ITERATION_THRESHOLD = 50
+PREDATOR_REPRODUCTION_ITERATION_THRESHOLD = 50
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/prey.py
+# prey.py
+import random
+import math
+from env.creature import Creature
+import env.constants as constants
+import numpy as np
+class Prey(Creature):
+    def __init__(self, x, y, size,name="prey",algorithm = "initalrandom"):
+        super().__init__(x, y, size, (255, 165, 0), constants.PREY_INITIAL_HEALTH, constants.PREY_MAX_HEALTH, constants.PREY_HEALTH_DECAY, constants.PREY_HEARING_RANGE)
+        self.sight_range = constants.PREY_SIGHT_RANGE  # 使用新的视觉范围
+        self.turn_counter = 0  # 用于记录逃跑时的计时器
+        self.name = name
+        self.type = 'prey'
+        self.algorithm = algorithm
+    #     self.log()
+    # def log(self):
+    #     print(self.name,end="    ")
+    #     print(self.algorithm)
+    def draw(self, screen):
+        self.reset_color()  # 重置颜色
+        super().draw(screen)
+        if self.selected:  # 如果被选中，显示视觉和听觉范围
+            self.draw_sight_range(screen)
+            self.draw_hearing_range(screen)
+
+            # 获取感知信息矩阵
+            other_data = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+            
+            # # 解析矩阵，分别处理视距内的捕食者、猎物、食物和障碍物
+            # observed_predator = [item for item in other_data if item[0] == 1]  # 捕食者
+            # observed_prey = [item for item in other_data if item[0] == 2]  # 猎物
+            # observed_food = [item for item in other_data if item[0] == 3]  # 食物
+            # observed_obstacle = [item for item in other_data if item[0] == 4]  # 障碍物
+            
+            # # 选中时高亮目标
+            # self.highlight_targets(screen, observed_predator, observed_prey, observed_food, observed_obstacle)
+
+    def get_observe_info(self):
+        ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        # print(ob_env)
+        return ob_env
+    def move_strategy(self,move_vector):
+        Creature.reset_all_colors(self.env_predators + self.env_prey)
+        # ob_env = self.observe_info(self.env_predators, self.env_prey, self.env_food, self.env_obstacles)
+        
+        
+        # move_vector = self.get_target(ob_env)
+
+        # 更新速度部分
+        self.previous_velocity = self.velocity[:]
+        self.velocity[0] += move_vector[0]  # 更新 x 方向的速度
+        self.velocity[1] += move_vector[1]  # 更新 y 方向的速度
+
+        # 限制速度
+        speed = math.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2)
+        if speed > constants.PREY_MAX_SPEED:
+            self.velocity[0] = (self.velocity[0] / speed) * constants.PREY_MAX_SPEED
+            self.velocity[1] = (self.velocity[1] / speed) * constants.PREY_MAX_SPEED
+
+        # 避免速度归零
+        if self.velocity[0] == 0 and self.velocity[1] == 0:
+            self.velocity = [random.choice([-1, 1]), random.choice([-1, 1])]
+
+        # 细化移动步骤并检测碰撞
+        step_size = 5  # 可以调整步长大小
+        total_steps = max(abs(self.velocity[0]), abs(self.velocity[1])) // step_size
+
+        for step in range(int(total_steps)):
+            self.rect.x += self.velocity[0] / total_steps
+            self.rect.y += self.velocity[1] / total_steps
+            self.eat_food(self.env_food)  # 在每一步检查碰撞
+
+        # 移动 Prey
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+
+    def get_target(self, ob_env):
+        # 解析矩阵，分别处理视距内的捕食者、猎物、食物和障碍物
+        observed_predator = [item for item in ob_env if item[0] == 1]  # 捕食者
+        observed_prey = [item for item in ob_env if item[0] == 2]  # 猎物
+        observed_food = [item for item in ob_env if item[0] == 3]  # 食物
+        observed_obstacle = [item for item in ob_env if item[0] == 4]  # 障碍物
+        sounds = [item for item in ob_env if item[0] == 9]
+        move_vector = [0, 0]
+        avoid_vector = [0, 0]
+
+        # 远离捕食者
+        if observed_predator:
+            closest_predator = min(observed_predator, key=lambda predator: math.sqrt(predator[1]**2 + predator[2]**2))
+            
+            dx = closest_predator[1]
+            dy = closest_predator[2]
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:  # 检查距离是否为零
+                avoid_vector[0] -= (dx / dist) * constants.PREY_EVASION_FACTOR
+                avoid_vector[1] -= (dy / dist) * constants.PREY_EVASION_FACTOR
+
+            # 定期回头观察
+            self.turn_counter += 1
+            if self.turn_counter >= constants.PREY_TURN_INTERVAL:
+                self.turn_counter = 0  # 重置计时器
+                # 模拟回头观察：调整方向
+                avoid_vector[0] += random.uniform(-0.5, 0.5)
+                avoid_vector[1] += random.uniform(-0.5, 0.5)
+
+        # 靠近食物
+        if observed_food:
+            closest_food = min(observed_food, key=lambda food: math.sqrt(food[1]**2 + food[2]**2))
+
+            dx = closest_food[1]
+            dy = closest_food[2]
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:  # 检查距离是否为零
+                move_vector[0] += dx / dist
+                move_vector[1] += dy / dist
+
+        # 避免障碍物
+        if observed_obstacle:
+            closest_obstacle = min(observed_obstacle, key=lambda obstacle: math.sqrt(obstacle[1]**2 + obstacle[2]**2))
+
+            dx = closest_obstacle[1]
+            dy = closest_obstacle[2]
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:  # 检查距离是否为零
+                avoid_vector[0] -= dx / dist
+                avoid_vector[1] -= dy / dist
+
+        # 利用听觉信息
+        for sound in sounds:
+            sound_intensity = sound[1]
+            sound_direction = sound[2]
+            move_vector[0] += sound_intensity * math.cos(sound_direction)
+            move_vector[1] += sound_intensity * math.sin(sound_direction)
+
+        # 随机移动
+        if not observed_predator and not observed_food:
+            if random.random() < constants.PREY_RANDOM_MOVE_CHANCE:
+                angle = random.uniform(-math.pi, math.pi)
+                move_vector[0] += math.cos(angle) * constants.PREY_RANDOM_MOVE_SPEED
+                move_vector[1] += math.sin(angle) * constants.PREY_RANDOM_MOVE_SPEED
+        born_factor = np.random.uniform(0, 1)
+
+        # 将避让捕食者和靠近食物的向量相结合
+        final_vector = [
+            born_factor,
+            move_vector[0] + avoid_vector[0],
+            move_vector[1] + avoid_vector[1]
+        ]
+        
+        return final_vector
+
+
+    def eat_food(self, foods):
+        for food in foods:
+            if self.rect.colliderect(food.rect):
+                self.health += constants.FOOD_HEALTH_GAIN
+                if self.health > self.max_health:
+                    self.health = self.max_health
+                foods.remove(food)  # 从foods列表中移除被吃掉的食物
+                return
+
+
+    def crossbreed(self, other,name):
+        child_x = (self.rect.x + other.rect.x) // 2
+        child_y = (self.rect.y + other.rect.y) // 2
+        # name = f"Prey{self.algorithm}_{next_prey_id}"  # 使用全局唯一ID生成名称
+        child = Prey(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=self.algorithm)
+
+        return child
+
+    def mutate(self):
+        self.velocity[0] = random.choice([-1, 1])
+        self.velocity[1] = random.choice([-1, 1])
+
+    def update_health(self):
+        # 基础的健康值减少
+        health_decay = self.health_decay
+
+        # 根据速度变化计算加速度
+        accel_x = self.velocity[0] - self.previous_velocity[0]
+        accel_y = self.velocity[1] - self.previous_velocity[1]
+        acceleration = math.sqrt(accel_x ** 2 + accel_y ** 2)
+        
+        # 根据加速度计算额外的健康值减少
+        health_decay += acceleration * constants.PREY_ACCELERATION_HEALTH_DECAY_FACTOR
+
+        self.health -= health_decay
+
+        if self.health <= 0:
+            self.health = 0
+        elif self.health > self.max_health:
+            self.health = self.max_health
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/simulator.py
+# simulator.py
+import random
+import pygame
+from env.predator import Predator
+from env.prey import Prey
+from env.food import Food
+from env.obstacle import Obstacle
+import env.constants as constants
+
+class Simulator:
+    def __init__(self, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.predators = []
+        self.preys = []
+        self.foods = []
+        self.obstacles = []
+        self.selected_agent = None
+        self.dead_predator_count = 0  # 新增变量记录死亡的捕食者数量
+        self.food_generation_timer = 0  # 初始化食物生成计时器
+        self.food_iteration_count = 0
+        self.next_predator_id = 1  # 用于生成唯一的捕食者名称
+        self.next_prey_id = 1  # 用于生成唯一的猎物名称
+        self.agent_status = {}  # Dictionary to track alive status
+        self.predator_algorithms_predict = {}
+        self.prey_algorithms_predict = {}
+        self.prey_algorithm_encoding = {}
+        self.pred_algorithm_encoding = {}
+
+
+        
+    def initialize(self,all_pred_algorithms,all_prey_algorithms):
+        self.food_generation_timer = 0  # 重置计时器
+        self.dead_predator_count = 0  # 新增变量记录死亡的捕食者数量
+        self.food_iteration_count = 0
+        self.next_predator_id = 1  # 用于生成唯一的捕食者名称
+        self.next_prey_id = 1  # 用于生成唯一的猎物名称
+        self.agent_status = {}
+        self.initialize_obstacles()
+        self.initialize_agents(predAlgorithms =all_pred_algorithms,preyAlgorithms = all_prey_algorithms)
+        self.initialize_food()
+
+
+
+
+    def initialize_obstacles(self):
+        self.obstacles = []
+        num_obstacles = random.randint(5, 10)
+        for _ in range(num_obstacles):
+            while True:
+                width = random.randint(50, 200)
+                height = random.randint(50, 200)
+                x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - width)
+                y = random.randint(0, self.screen_height - height)
+                new_obstacle = Obstacle(x, y, width, height)
+
+                if not any(new_obstacle.rect.colliderect(obs.rect) for obs in self.obstacles):
+                    self.obstacles.append(new_obstacle)
+                    break
+
+    def initialize_agents(self,predAlgorithms = [],preyAlgorithms = []):
+        self.predators = []
+        self.preys = []
+        if len(predAlgorithms)!= constants.NUM_PREDATORS or len(preyAlgorithms)!= constants.NUM_PREY:
+            print("algorithms lens not equal number of agent")
+        for predalgorithm in predAlgorithms:
+            self.generate_predator(algorithm=predalgorithm)
+        for preyalgorithm in preyAlgorithms:
+            self.generate_prey(algorithm=preyalgorithm)
+
+    def initialize_food(self):
+        self.foods = []
+        for _ in range(constants.NUM_FOOD):
+            self.generate_food()
+
+    def generate_prey(self,algorithm="random"):
+        while True:
+            x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - constants.BLOCK_SIZE)
+            y = random.randint(0, self.screen_height - constants.BLOCK_SIZE)
+            name = f"Prey{algorithm}_{self.next_prey_id}"  # 使用全局唯一ID生成名称
+            new_prey = Prey(x, y, constants.BLOCK_SIZE,name=name,algorithm=algorithm)
+
+            if not any(new_prey.rect.colliderect(obs.rect) for obs in self.obstacles):
+                self.preys.append(new_prey)
+                self.agent_status[new_prey.name] = True  # Mark as alive
+                self.next_prey_id += 1  # 在成功生成猎物后增加ID
+                break
+
+
+    def generate_predator(self,algorithm="random"):
+        while True:
+            x = random.randint(constants.CONTROL_PANEL_WIDTH, self.screen_width - constants.BLOCK_SIZE)
+            y = random.randint(0, self.screen_height - constants.BLOCK_SIZE)
+            name = f"Pred{algorithm}_{self.next_predator_id}"  # 使用全局唯一ID生成名称
+            new_predator = Predator(x, y, constants.BLOCK_SIZE,name=name,algorithm=algorithm)
+            if not any(new_predator.rect.colliderect(obs.rect) for obs in self.obstacles):
+                self.predators.append(new_predator)
+                self.agent_status[new_predator.name] = True  # Mark as alive
+                self.next_predator_id += 1  # 在成功生成猎物后增加ID
+                break
+
+    def generate_food(self):
+        while True:
+            x = random.randint(constants.CENTER_AREA_X_START, constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE)
+            y = random.randint(constants.CENTER_AREA_Y_START, constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE)
+            new_food = Food(x, y, constants.FOOD_SIZE)
+            if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles):
+                self.foods.append(new_food)
+                break
+
+    def breedPrey(self, prey,otherPrey):
+        if prey.iteration_counter < constants.PREY_REPRODUCTION_ITERATION_THRESHOLD:
+            return
+        if prey.health < constants.PREY_MIN_HEALTH_FOR_REPRODUCTION:
+            return
+        if random.random() > constants.PREY_REPRODUCTION_PROBABILITY:
+            return
+
+        other_prey = otherPrey
+        if other_prey.health >= constants.PREY_MIN_HEALTH_FOR_REPRODUCTION:
+            name = f"Prey{prey.algorithm}_{self.next_prey_id}"
+            self.agent_status[name] = True
+
+            child = prey.crossbreed(other_prey,name)
+            if random.random() < constants.MUTATION_CHANCE:
+                child.mutate()
+            self.ensure_no_collision(child)
+            self.health_update(prey,other_prey,child,constants.HEALTH_RENEW)
+            self.preys.append(child)
+            self.next_prey_id += 1  # 成功生成猎物后增加ID
+        # # 生成新的猎物
+        # child_x = (prey1.rect.x + prey2.rect.x) // 2
+        # child_y = (prey1.rect.y + prey2.rect.y) // 2
+        # name = f"Prey{prey1.algorithm}_{self.next_prey_id}"  # 使用全局唯一ID生成名称
+
+        # child = Prey(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=prey1.algorithm)
+        # # 确保新生成的猎物不与其他障碍物或智能体发生碰撞
+        #     # 确保新生成的猎物不会与任何障碍物重叠
+        # if not any(child.rect.colliderect(obs.rect) for obs in self.obstacles):
+        #     self.preys.append(child)
+        #     self.next_prey_id += 1  # 成功生成猎物后增加ID
+
+    def breedPredator(self, predator,otherpredator):
+        if predator.iteration_counter < constants.PREDATOR_REPRODUCTION_ITERATION_THRESHOLD:
+            return
+        if predator.health < constants.PREDATOR_MIN_HEALTH_FOR_REPRODUCTION:
+            return
+        if random.random() > constants.PREDATOR_REPRODUCTION_PROBABILITY:
+            return
+
+        other_predator = otherpredator
+        if other_predator.health >= constants.PREDATOR_MIN_HEALTH_FOR_REPRODUCTION:
+            name = f"Pred{predator.algorithm}_{self.next_predator_id}"
+            self.agent_status[name] = True
+            child = predator.crossbreed(other_predator,name)
+            if random.random() < constants.MUTATION_CHANCE:
+                child.mutate()
+            self.ensure_no_collision(child)
+            self.health_update(predator,other_predator,child,constants.HEALTH_RENEW)
+            self.predators.append(child)
+            self.next_predator_id += 1  # 成功生成猎物后增加ID
+
+    def health_update(self,parentA, parentB, child, health_decrease_rate):
+        # 计算 a 和 b 减少的生命值
+        health_parentA_decrease = parentA.health * (health_decrease_rate)
+        health_parentB_decrease = parentB.health * (health_decrease_rate)
+        
+        # 更新 a 和 b 的生命值
+        parentA.health -= health_parentA_decrease
+        parentB.health -= health_parentB_decrease
+        
+        # 更新 c 的生命值为减少的生命值之和
+        child.health = health_parentA_decrease + health_parentB_decrease
+    # def applyGeneticAlgorithm(self):
+    #     new_prey_born = 0
+    #     new_predator_born = 0
+
+    #     for prey in self.preys:
+    #         initial_prey_count = len(self.preys)
+    #         self.breedPrey(prey)
+    #         if len(self.preys) > initial_prey_count:
+    #             new_prey_born += 1
+
+    #     for predator in self.predators:
+    #         initial_predator_count = len(self.predators)
+    #         self.breedPredator(predator)
+    #         if len(self.predators) > initial_predator_count:
+    #             new_predator_born += 1
+
+    #     return new_prey_born, new_predator_born
+
+    # def generate_agent(self):
+    #     self.applyGeneticAlgorithm()
+
+    def ensure_no_collision(self, agent, offset=50):
+        initial_x, initial_y = agent.rect.x, agent.rect.y
+        
+        while any(agent.rect.colliderect(obs.rect) for obs in self.obstacles):
+            agent.rect.x = random.randint(
+                max(constants.CONTROL_PANEL_WIDTH, initial_x - offset), 
+                min(self.screen_width - agent.rect.width, initial_x + offset)
+            )
+            agent.rect.y = random.randint(
+                max(0, initial_y - offset), 
+                min(self.screen_height - agent.rect.height, initial_y + offset)
+            )
+
+    def add_food(self):
+        self.food_iteration_count += 1
+        if self.food_iteration_count % constants.FOOD_GENERATION_INTERVAL == 0:
+            # self.generate_random_food()
+            self.generate_food_near_existing()
+
+    def generate_random_food(self):
+        num_random_foods = int(constants.MAX_FOOD_COUNT * constants.RANDOM_FOOD_PROPORTION)
+        new_foods = []
+        while len(new_foods) < num_random_foods:
+            x = random.randint(constants.CENTER_AREA_X_START,constants.CENTER_AREA_X_START+constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE)
+            y = random.randint(constants.CENTER_AREA_Y_START, constants.CENTER_AREA_Y_START+constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE)
+            new_food = Food(x, y, constants.FOOD_SIZE)
+            if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
+            not any(new_food.rect.colliderect(f.rect) for f in self.foods):
+                new_foods.append(new_food)
+        self.foods.extend(new_foods)
+        
+    def generate_food_near_existing(self):
+        directions = [(constants.FOOD_SPAWN_DISTANCE, 0), (-constants.FOOD_SPAWN_DISTANCE, 0),
+                    (0, constants.FOOD_SPAWN_DISTANCE), (0, -constants.FOOD_SPAWN_DISTANCE)]
+        
+        if len(self.foods) >= constants.MAX_FOOD_COUNT:
+            return
+
+        new_foods = []
+        for food in self.foods:
+            dx, dy = random.choice(directions)
+            x = food.rect.x + dx
+            y = food.rect.y + dy
+            if constants.CENTER_AREA_X_START <= x <= constants.CENTER_AREA_X_START + constants.CENTER_AREA_WIDTH - constants.FOOD_SIZE and \
+            constants.CENTER_AREA_Y_START <= y <= constants.CENTER_AREA_Y_START + constants.CENTER_AREA_HEIGHT - constants.FOOD_SIZE:
+                new_food = Food(x, y, constants.FOOD_SIZE)
+                if not any(new_food.rect.colliderect(obs.rect) for obs in self.obstacles) and \
+                not any(new_food.rect.colliderect(f.rect) for f in self.foods):
+                    new_foods.append(new_food)
+                    if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
+                        break
+            if len(new_foods) + len(self.foods) >= constants.MAX_FOOD_COUNT:
+                break
+
+        self.foods.extend(new_foods)
+
+    def check_events(self):
+        pass
+
+    def remove_dead(self):
+        self.predators = [p for p in self.predators if p.is_alive]
+        self.preys = [p for p in self.preys if p.is_alive ]
+        # Update the status of agents
+        for agent in list(self.agent_status.keys()):
+            if agent not in [p.name for p in self.predators + self.preys]:
+                self.agent_status[agent] = False
+    def is_agent_alive(self, name):
+            return self.agent_status.get(name, False)  # Return False if agent is not found
+
+    # def obs_envs(self):
+    #     for predator in self.predators:
+    #         predator.set_prey_list(self.preys)
+    #         predator.env_predators = self.predators
+    #         predator.env_prey = self.preys
+    #         predator.env_food = self.foods
+    #         predator.env_obstacles = self.obstacles
+    #         # obs_env = self.observe_info_predator(predator)
+    #         # move_vector = self.action_predator(obs_env)
+
+    #         self.move_predator(predator)
+    #         predator.increment_iteration()  # 增加迭代计数器
+
+    #     for prey in self.preys:
+    #         prey.env_predators = self.predators
+    #         prey.env_prey = self.preys
+    #         prey.env_food = self.foods
+    #         prey.env_obstacles = self.obstacles
+    #         self.move_prey(prey)
+    #         prey.increment_iteration()  # 增加迭代计数器
+
+    def check_collisions(self):
+        # 捕食者和猎物之间的相遇检测
+        for predator in self.predators:
+            for prey in self.preys:
+                if predator.rect.colliderect(prey.rect):
+                    self.handle_predator_prey_collision(predator, prey)
+        
+        # 捕食者之间的相遇检测
+        for i, predator1 in enumerate(self.predators):
+            if not predator1.born:
+                continue
+            for predator2 in self.predators[i+1:]:
+                if predator2.born:
+                    if predator1.rect.colliderect(predator2.rect):
+                        self.handle_predator_predator_collision(predator1, predator2)
+        # 猎物之间的相遇检测
+        for i, prey1 in enumerate(self.preys):
+            if not prey1.born:
+                continue
+            for prey2 in self.preys[i+1:]:
+                if prey2.born:
+                    if prey1.rect.colliderect(prey2.rect):
+                        self.handle_prey_prey_collision(prey1, prey2)
+        
+    def handle_predator_prey_collision(self, predator, prey):
+        # 增加捕食者的健康值
+        predator.health += prey.health * constants.PREDATOR_HEALTH_GAIN_FACTOR
+
+        if predator.health > predator.max_health:
+            predator.health = predator.max_health
+
+        # 移除猎物
+        prey.is_alive = False
+        self.agent_status[prey.name] = False
+        prey.health = 0
+        # prey.prey_list.remove(prey)
+    def handle_predator_predator_collision(self, predator1, predator2):
+        # 检查是否使用相同的算法
+        if predator1.algorithm == predator2.algorithm and predator1.born and predator2:
+            self.breedPredator(predator1, predator2)
+
+    # def breed_predator(self, predator1, predator2):
+    #     # 生成新的捕食者
+    #     child_x = (predator1.rect.x + predator2.rect.x) // 2
+    #     child_y = (predator1.rect.y + predator2.rect.y) // 2
+    #     name = f"Pred{predator1.algorithm}_{self.next_predator_id}"  # 使用全局唯一ID生成名称
+
+    #     child = Predator(child_x, child_y, constants.BLOCK_SIZE, name = name,algorithm=predator1.algorithm)
+
+    #         # 确保新生成的猎物不会与任何障碍物重叠
+    #     if not any(child.rect.colliderect(obs.rect) for obs in self.obstacles):
+    #         self.predators.append(child)
+    #         self.next_predator_id += 1  # 成功生成猎物后增加ID
+
+
+    def handle_prey_prey_collision(self, prey1, prey2):
+        # 检查是否使用相同的算法
+        if prey1.algorithm == prey2.algorithm and prey1.born and prey2.born:
+
+            self.breedPrey(prey1, prey2)
+
+    # def breed_prey(self, prey1, prey2):
+    #     # 生成新的猎物
+    #     child_x = (prey1.rect.x + prey2.rect.x) // 2
+    #     child_y = (prey1.rect.y + prey2.rect.y) // 2
+    #     name = f"Prey{prey1.algorithm}_{self.next_prey_id}"  # 使用全局唯一ID生成名称
+
+    #     child = Prey(child_x, child_y, constants.BLOCK_SIZE,name=name, algorithm=prey1.algorithm)
+    #     # 确保新生成的猎物不与其他障碍物或智能体发生碰撞
+    #         # 确保新生成的猎物不会与任何障碍物重叠
+    #     if not any(child.rect.colliderect(obs.rect) for obs in self.obstacles):
+    #         self.preys.append(child)
+    #         self.next_prey_id += 1  # 成功生成猎物后增加ID
+
+    # def move_models(self):
+    #     for predator in self.predators:
+    #         predator.set_prey_list(self.preys)
+    #         predator.env_predators = self.predators
+    #         predator.env_prey = self.preys
+    #         predator.env_food = self.foods
+    #         predator.env_obstacles = self.obstacles
+    #         # self.move_predator(predator)
+
+    #         predator_ob_env = predator.get_observe_info()
+    #         predator_move_vector = predator.get_target(predator_ob_env)
+    #         # print(move_vector)
+    #         predator.move_strategy(predator_move_vector)
+    #         predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+
+    #         predator.increment_iteration()  # 增加迭代计数器
+
+    #     for prey in self.preys:
+    #         prey.env_predators = self.predators
+    #         prey.env_prey = self.preys
+    #         prey.env_food = self.foods
+    #         prey.env_obstacles = self.obstacles
+
+    #         # self.move_prey(prey)
+    #         prey_ob_env = prey.get_observe_info()
+    #         prey_move_vector = prey.get_target(prey_ob_env)
+    #         prey.move_strategy(prey_move_vector)
+    #         prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+            
+    #         prey.increment_iteration()  # 增加迭代计数器
+    def update_predator_environment(self,predator, preys, predators, foods, obstacles):
+        predator.set_prey_list(preys)
+        predator.env_predators = predators
+        predator.env_prey = preys
+        predator.env_food = foods
+        predator.env_obstacles = obstacles
+
+    def update_prey_environment(self,prey, preys, predators, foods, obstacles):
+        prey.env_predators = predators
+        prey.env_prey = preys
+        prey.env_food = foods
+        prey.env_obstacles = obstacles
+
+    def move_models(self,actions = {}):
+        predator_move_vector = None
+        for predator in self.predators:
+            self.update_predator_environment(predator, self.preys, self.predators, self.foods, self.obstacles)
+            predator_ob_env = predator.get_observe_info()
+            # predator_move_vector = predator.get_target(predator_ob_env)
+            # predator_move_vector = actions.get(predator.name, predator.get_target(predator_ob_env))
+            predator_move_vector = actions.get(predator.name, self.trained_algorithm(predator,predator.type,predator.algorithm,predator_ob_env))
+            if len(predator_move_vector) == 3:
+                born_factor, b, c = predator_move_vector
+                predator.born = born_factor
+            else:
+                print("move_models_predator vectoer len not euql 3")
+            prey_move_vector = (b, c)
+            predator.move_strategy(predator_move_vector)
+            predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+            predator.increment_iteration()  # 增加迭代计数器
+
+        for prey in self.preys:
+            self.update_prey_environment(prey, self.preys, self.predators, self.foods, self.obstacles)
+            prey_ob_env = prey.get_observe_info()
+            # prey_move_vector = prey.get_target(prey_ob_env)
+            prey_move_vector = actions.get(prey.name, self.trained_algorithm(prey,prey.type,prey.algorithm,prey_ob_env))
+            # 解包并只取 (b, c)
+            if len(prey_move_vector) == 3:
+                born_factor, b, c = prey_move_vector
+                if born_factor> 0.5:
+                    prey.born = True
+                else:
+                    prey.born = False
+            else:
+                print("move_models_prey vectoer len not euql 3")
+
+            prey_move_vector = (b, c)
+            prey.move_strategy(prey_move_vector)
+            prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+            prey.increment_iteration()  # 增加迭代计数器
+    def trained_algorithm(self,agent,agent_type, agent_algorithm, observation_info):
+        if agent_type == "predator":
+            algorithm_function = self.predator_algorithms_predict.get(agent_algorithm)
+        elif agent_type == "prey":
+            algorithm_function = self.prey_algorithms_predict.get(agent_algorithm)
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
+        
+        if algorithm_function is None:
+            # algorithm_function = self.prey_algorithms_predict.get('random')
+            # algorithm_function = math_algorithms
+            return agent.get_target(observation_info)
+            # raise ValueError(f"Unknown algorithm: {agent_algorithm} for {agent_type}")
+        
+        return algorithm_function(observation_info)
+
+    def obsreve_prey(self):
+        pass
+    def observe_info_predator(self):
+        pass
+    def move_prey(self, prey):
+        prey_ob_env = prey.get_observe_info()
+        move_vector = prey.get_target(prey_ob_env)
+        prey.move_strategy(move_vector)
+        prey.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+
+    def move_predator(self, predator):
+        predator_ob_env = predator.get_observe_info()
+        move_vector = predator.get_target(predator_ob_env)
+        print(move_vector)
+        predator.move_strategy(move_vector)
+        predator.move(constants.CONTROL_PANEL_WIDTH, self.screen_width, self.screen_height, self.obstacles)
+
+    def draw_models(self, screen):
+        for obstacle in self.obstacles:
+            obstacle.draw(screen)
+        for predator in self.predators:
+            predator.draw(screen)
+        for prey_item in self.preys:
+            prey_item.draw(screen)
+        for food_item in self.foods:
+            food_item.draw(screen)
+
+        if self.selected_agent:
+            agent_info = (
+                f"{self.selected_agent.__class__.__name__}: "
+                f"Position ({self.selected_agent.rect.x}, {self.selected_agent.rect.y}), "
+                f"Velocity ({self.selected_agent.velocity[0]}, {self.selected_agent.velocity[1]}), "
+                f"Health ({self.selected_agent.health})"
+            )
+            info_surface = pygame.font.Font(None, 24).render(agent_info, True, (255, 255, 255))
+            screen.blit(info_surface, (50, self.screen_height - 100))
+
+    def update_health(self):
+        for predator in self.predators:
+            predator.update_health()
+        for prey_item in self.preys:
+            prey_item.update_health()
+
+    def prey_hunt(self):
+        for prey_item in self.preys:
+            prey_item.eat_food(self.foods)
+
+    def predator_hunt(self):
+        for predator in self.predators:
+            predator.hunt_prey(self.preys)
+            
+    def remove_food(self, food):
+        if food in self.foods:
+            self.foods.remove(food)
+                
+    def decrease_health(self):
+        self.update_health()
+        self.remove_dead()
+
+    def get_agent_info(self, pos):
+        for agent in self.predators + self.preys:
+            if agent.rect.collidepoint(pos):
+                return agent
+        return None
+
+    def spawn_food(self, count):
+        for _ in range(count):
+            self.generate_food()
+
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/obstacle.py
+import pygame
+
+class Obstacle:
+    def __init__(self, x, y, width, height):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.color = (100, 100, 100)  # 灰色
+        self.type = "obstacle"
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
+
+
+# File: /home/qrbao/Downloads/code/code/coderesearch13copy2/env/food.py
+import pygame
+import env.constants as constants
+
+class Food:
+    def __init__(self, x, y, size):
+        self.rect = pygame.Rect(x, y, size, size)
+        self.color = constants.FOOD_COLOR
+        self.type = "food"
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
+
+
