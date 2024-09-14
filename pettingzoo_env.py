@@ -1,421 +1,508 @@
-#______unfinished_________
-
-
-
-
-import functools
-import random
-from copy import copy
-
-import numpy as np
-from gymnasium.spaces import Discrete, MultiDiscrete
-from tensordict import TensorDict
-import torch
-import gym
-from gym import spaces
+import gymnasium as gym
+import gymnasium 
+from gymnasium import spaces
+from pettingzoo import ParallelEnv
+from pettingzoo.utils import parallel_to_aec
+from pettingzoo.test import parallel_api_test
+# from pettingzoo.test import api_test
+from pettingzoo_api_test import api_test
 import pygame
+from typing import Any, Collection, Dict, List, Optional, Sequence
+
 import numpy as np
 import random
 from env.simulator import Simulator
 import env.constants as constants
-from torchrl.envs.utils import check_env_specs
-from gym.utils.env_checker import check_env
-from gym.envs.registration import register
-from tensordict import TensorDict
+# from stable_baselines3.common.env_checker import check_env
+from gymnasium.utils.env_checker import check_env
 import torch
+# import matplotlib.pyplot as plt
+from pettingzoo.utils import aec_to_parallel, parallel_to_aec
+# from parallel_test import parallel_api_test
 
-from pettingzoo import ParallelEnv
+class LISPredatorPreyEnv(ParallelEnv):
+    metadata = {"name": "LISPredatorPreyEnv"}
+    def __init__(self, prey_algorithms=[], pred_algorithms=[], predator_algorithms_predict={}, prey_algorithms_predict={}):
+        super(LISPredatorPreyEnv, self).__init__()
 
-
-
-
-class LISPredatorPreyEnvZoo(ParallelEnv):
-    """The metadata holds environment constants.
-
-    The "name" metadata allows the environment to be pretty printed.
-    """
-
-    metadata = {
-        "name": "custom_environment_v0",
-    }
-
-    def __init__(self):
-        
-        # 初始化模拟器
         self.simulator = Simulator(screen_width=3840, screen_height=2160)
         self.group_map = {}
         self.current_step = 0
         self.max_steps = 10_000
+        self.traing_algorithm = ''
 
 
+        # 初始化算法
+        self.prey_algorithms = prey_algorithms
+        self.pred_algorithms = pred_algorithms
+        self._initialize_algorithm_encoding()
+
+        # self.simulator.predator_algorithms_predict = predator_algorithms_predict
+        # self.simulator.prey_algorithms_predict = prey_algorithms_predict
+        self.simulator.prey_algorithm_encoding = self.prey_algorithm_encoding
+        self.simulator.pred_algorithm_encoding = self.pred_algorithm_encoding
+        self.simulator.predator_algorithms_predict = self.convert_dicts_to_numeric_keys(self.pred_algorithm_encoding,predator_algorithms_predict)
+        self.simulator.prey_algorithms_predict = self.convert_dicts_to_numeric_keys(self.prey_algorithm_encoding,prey_algorithms_predict)
+        self.agents= []
+        self.possible_agents =[]
+        self._initialize_agent_environment()
         
         # 初始化观察和动作空间
-        self.max_range = max(600, 1000)  
-        self.zero_list = [[0 for _ in range(3)] for _ in range(25)]
-        self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
-        self.new_shape = (self.num_entities, 25, 3)
-        self.obs_low = np.full(self.new_shape, -self.max_range, dtype=np.float32) #inf maybe not the best choice , let us decide later
-        self.obs_high = np.full(self.new_shape, self.max_range, dtype=np.float32)
-        self.action_shape = (self.num_entities,2)
-        self.action_speed_range = max(constants.PREY_MAX_SPEED,constants.PREY_MAX_SPEED)
-        self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
-        self.action_high = np.full(self.action_shape, self.action_speed_range, dtype=np.float32)
-        # obs_low = np.array([0, 0, 0] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
-        # obs_high = np.array([max_range, max_range, max_range] * 25*(constants.NUM_PREDATORS+constants.NUM_PREY))
-        # self.observation_space_shape = (constants.NUM_PREDATORS+constants.NUM_PREY) * 3 * 25
-        self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high,dtype=np.float32)
-        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
-        self.interation = 0
-        # 调用 reset 方法初始化环境
-        self.reset() 
-        self.agent_keys = []
-
-    def reset(self, seed=None, options=None):
-        """Reset set the environment to a starting point.
-
-        It needs to initialize the following attributes:
-        - agents
-        - timestamp
-        - prisoner x and y coordinates
-        - guard x and y coordinates
-        - escape x and y coordinates
-        - observation
-        - infos
-
-        And must set up the environment so that render(), step(), and observe() can be called without issues.
-        """
-        self.group_map.clear()
-        if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
-        allalgorithms= self.reset_algorithm()
-        all_pred_algorithms, all_prey_algorithms = allalgorithms[:constants.NUM_PREDATORS],allalgorithms[constants.NUM_PREDATORS:]
+        self._initialize_spaces()
+    def _initialize_agent_environment(self):
+        """将reset中不需要每次重置的部分移到这里初始化。"""
+        all_pred_algorithms, all_prey_algorithms = self.reset_algorithm()
         self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
-        self.agent_keys = list(self.simulator.agent_status.keys())
+        self.agents = [agent.name for agent in self.simulator.preys + self.simulator.predators]
+        self.possible_agents = [agent.name for agent in self.simulator.preys + self.simulator.predators]
         self.map_agents_to_groups(self.simulator.predators, self.simulator.preys)
-        # 初始化环境信息（捕食者、猎物、食物和障碍物）
+
         for predator in self.simulator.predators:
             self._set_agent_env(predator)
         for prey in self.simulator.preys:
             self._set_agent_env(prey)
-        # 获取所有智能体的初始观测数据
-        all_observations = []
-        for group_name in self.group_map.keys():
-            for agent in getattr(self.simulator, group_name):
-                all_observations.append(agent.get_observe_info())
-        obs_tensors = {
-            agent_key: torch.tensor(all_observation, dtype=torch.float32)
-            for agent_key, all_observation in zip(self.agent_keys, all_observations)
-        }
-        sample_key = next(iter(obs_tensors))
-        batch_size = obs_tensors[sample_key].shape[0]
-        obs_tensordict = TensorDict(obs_tensors, batch_size=[batch_size])
-        obs = np.array(all_observations, dtype=np.float32) #np.shape(all_observations) = (2250,3)
-        # print(np.shape(all_observations))
-        # obs = TensorDict({
-        #     'observation': torch.tensor(obs)
-        # }, batch_size=[])
-        info = {}
-        # print("Initial Observation:", obs)
-        # assert self.observation_space.contains(obs), "Initial observation is out of bounds!"
 
-        # 返回一个数组，符合 observation_space 的定义
-        return obs_tensordict, info
-    def map_agents_to_groups(self,simPredators,simPreys):
+    def _initialize_spaces(self):
+        """Initialize observation and action spaces."""
+        self.max_range = max(constants.PREY_HEARING_RANGE, constants.PREDATOR_HEARING_RANGE)
+        self.num_entities = constants.NUM_PREDATORS + constants.NUM_PREY
+        self.observation_shape = (self.num_entities, 25, 4)
+        self.obs_low = np.full(self.observation_shape, -self.max_range, dtype=np.float32)
+        self.obs_high = np.full(self.observation_shape, self.max_range, dtype=np.float32)
+        # self.action_shape = (self.num_entities, 3)
+        # self.action_speed_range = max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        # self.action_low = np.full(self.action_shape, -self.action_speed_range, dtype=np.float32)
+        # self.action_high = np.full(self.action_shape, self.action_speed_range, dtype=np.float32)
+        # self.action_low[:, 0] = 0.0
+        # self.action_high[:, 0] = 1.0
+        MAX_CONSTANT = 10
+        # self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high, dtype=np.float32)
+        ob_env1_space = gymnasium.spaces.Tuple((
+            spaces.Discrete(4),                    # 第一列，离散值 1 到 4
+            spaces.Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32),  # 第二、三列，位置坐标，连续值
+            spaces.Discrete(MAX_CONSTANT)          # 第四列，离散值 0 到 MAX_CONSTANT
+        ))
+        ob_env1_space = gymnasium.spaces.Tuple([ob_env1_space] * 20)
+        ob_env2_space = spaces.Box(
+            low=np.array([[0, -np.pi]] * 5),    # 形状 (5, 2)
+            high=np.array([[1, np.pi]] * 5),
+            dtype=np.float32
+        )
+        ob_env3_space = spaces.Box(low=-np.inf, high=np.inf, shape=(), dtype=np.float32)
+        # self.observation_space = gymnasium.spaces.Dict({
+        #     "sight": ob_env1_space,   # 5 行 4 列的 ob_env1 (通过 Tuple 实现离散和连续的组合)
+        #     "hearing": ob_env2_space,   # 5 行 2 列的 ob_env2
+        #     "delta_energy": ob_env3_space    # 单个连续值的 ob_env3
+        # })
+        self.totalobservation_space = spaces.Dict({
+            f"{agent.name}": spaces.Dict({
+                "sight": ob_env1_space,   # 每个智能体的视觉信息
+                "hearing": ob_env2_space,  # 每个智能体的听觉信息
+                "delta_energy": ob_env3_space  # 每个智能体的能量信息
+            }) for agent in self.simulator.predators+self.simulator.preys
+        })
+        # self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
+        self.totalaction_space = spaces.Dict({
+            f"{agent.name}": spaces.Dict({
+                'makeAChild': spaces.Discrete(2),  # 是否生成后代 (0 或 1)
+                'moveVector': spaces.Box(-10.0, 10.0, (2,), dtype=np.float32)  # 移动向量 (x, y)
+            }) for agent in self.simulator.predators+self.simulator.preys
+        })
+        # Action space modification:
+        # The first value is now discrete {0, 1}
+        # The second and third values are continuous, as before
+        # self.action_speed_range = max(constants.PREY_MAX_SPEED, constants.PREDATOR_MAX_SPEED)
+        # self.action_low = np.full((2,), -self.action_speed_range, dtype=np.float32)
+        # self.action_high = np.full((2,), self.action_speed_range, dtype=np.float32)
+        # self.print_obs()
+        # Define action space as Tuple of (Discrete, Box)
+        # self.action_space = spaces.Tuple((
+        #     spaces.Discrete(2),  # First value: discrete (0 or 1)
+        #     spaces.Box(low=-self.action_speed_range, high=self.action_speed_range, shape=(2,), dtype=np.float32)  # 第二个和第三个变量是连续的，表示速度的 x 和 y 分量
+        # ))
+        # self.action_space = spaces.Tuple([self.action_space] * self.num_entities)
+
+    # def print_obs(self):
+    #     print(self.observation_space.sample())
+    def observation_space(self, agent):
+        """返回特定智能体的观测空间。"""
+
+        return self.totalobservation_space[agent]
+
+    def action_space(self, agent):
+        """返回特定智能体的动作空间。"""
+        return self.totalaction_space[agent]
+
+    def _initialize_algorithm_encoding(self):
+        """Initialize algorithm encoding."""
+        self.agents = []
+        
+        self.prey_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.prey_algorithms))}
+        self.prey_algorithm_encoding["random"] = 1
+        self.pred_algorithm_encoding = {algo: idx + 2 for idx, algo in enumerate(set(self.pred_algorithms))}
+        self.pred_algorithm_encoding["random"] = 1
+
+    def reset(self, seed=None, options=None):
+        """Reset the environment."""
+        # super().reset(seed=seed, **kwargs)
+        self.agents.clear()
+        self.group_map.clear()
+        self._set_random_seed(seed)
+        self._initialize_agent_environment()
+
+
+        # all_pred_algorithms, all_prey_algorithms = self.reset_algorithm()
+        # self.simulator.initialize(all_pred_algorithms, all_prey_algorithms)
+
+        # self.initialnames.extend(agent.name for agent in self.simulator.preys + self.simulator.predators)
+        # self.map_agents_to_groups(self.simulator.predators, self.simulator.preys)
+
+        # for predator in self.simulator.predators:
+        #     self._set_agent_env(predator)
+        # for prey in self.simulator.preys:
+        #     self._set_agent_env(prey)
+
+        obs = {agent.name: agent.get_observe_info() for group_name in self.group_map.keys() for agent in getattr(self.simulator, group_name)}
+        # zero_data = {
+        #     'sight': [
+        #         (0, np.zeros(2, dtype=np.float32), 0) for _ in range(20)
+        #     ],
+        #     'hearing': np.zeros((5, 2), dtype=np.float32),
+        #     'delta_energy': np.array(0., dtype=np.float32)
+        # }
+        infos =  {agent.name: {} for group_name in self.group_map.keys() for agent in getattr(self.simulator, group_name)}
+        # obstestinfo = np.array([1,2,3],dtype=np.float32)
+        # obstest = {agent.name: obstestinfo for group_name in self.group_map.keys() for agent in getattr(self.simulator, group_name)}
+
+        return obs,infos
+
+    def _set_random_seed(self, seed):
+        """Set random seed."""
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
+    def convert_dicts_to_numeric_keys(self,algorithm_encoding, algorithm_predict):
+        """
+        将 algorithm_encoding 中的值作为键映射到 algorithm_predict 中，生成数值键的字典。
+        
+        :param algorithm_encoding: 包含算法名称到数字映射的字典
+        :param algorithm_predict: 包含算法名称到函数的字典
+        :return: 使用数值键的新字典，数值来自 algorithm_encoding 的值
+        """
+        new_algorithm_predict = {}
+
+        # 遍历 algorithm_encoding，重新构建使用数值键的字典
+        for algorithm_name, numeric_key in algorithm_encoding.items():
+            if algorithm_name in algorithm_predict:
+                # 将数值键和对应的算法函数映射到新字典
+                new_algorithm_predict[numeric_key] = algorithm_predict[algorithm_name]
+            else:
+                print(f"Warning: {algorithm_name} not found in algorithm_predict")
+
+        return new_algorithm_predict
+
+    def map_agents_to_groups(self, simPredators, simPreys):
+        """Map agents to their respective groups."""
         self.group_map['predators'] = [predator.name for predator in simPredators]
         self.group_map['preys'] = [prey.name for prey in simPreys]
 
     def reset_algorithm(self):
-        prey_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
-        pred_algorithms = ["PPO","PPO","PPO","DDPG","DDPG","DDPG"]
-        all_pred_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREDATORS,pred_algorithms)
-        all_prey_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREY,prey_algorithms)
-        return all_pred_algorithms+all_prey_algorithms
-        # assigned_Predalgorithms = assign_algorithms_to_agents(self.simulator.predators, all_pred_algorithms)
-        # assigned_Preyalgorithms = assign_algorithms_to_agents(self.simulator.preys, all_prey_algorithms)
-    def assign_algorithms_to_agents(self,len_agents, algorithm_names):
-        """
-        分配算法给每个智能体。
+        """Assign algorithms to agents and encode them."""
+        all_pred_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREDATORS, self.pred_algorithms)
+        encoded_all_pred_algorithms = [self.pred_algorithm_encoding[algo] for algo in all_pred_algorithms]
 
-        参数:
-        - agents: 智能体列表。
-        - algorithm_names: 预定义的算法名称列表。
+        all_prey_algorithms = self.assign_algorithms_to_agents(constants.NUM_PREY, self.prey_algorithms)
+        encoded_all_prey_algorithms = [self.prey_algorithm_encoding[algo] for algo in all_prey_algorithms]
 
-        返回:
-        - 包含算法名称的列表，长度与agents列表相同。如果算法名称不足，则用'random'补充。
-        """
-        assigned_algorithms = []
-        for i in range(len_agents):
-            if i < len(algorithm_names):
-                assigned_algorithms.append(algorithm_names[i])
-            else:
-                assigned_algorithms.append('random')
-        return assigned_algorithms
+        return encoded_all_pred_algorithms, encoded_all_prey_algorithms
+
     def _set_agent_env(self, agent):
+        """Set environment properties for the agent."""
         agent.env_predators = self.simulator.predators
         agent.env_prey = self.simulator.preys
         agent.env_food = self.simulator.foods
         agent.env_obstacles = self.simulator.obstacles
 
-
-
     def step(self, actions):
-        new_states, rewards, dones, infos = [], [], [], []
-        self.current_step += 1
-        truncated = self.current_step >= self.max_steps
-        # 获取所有键并转换为列表
-        # keys = list(self.simulator.agent_status.keys())
-
-        # 获取从 constants.NUM_PREDATORS 开始往后 constants.NUM_PREYS 个键
-        selected_keys = self.agent_keys[constants.NUM_PREDATORS:constants.NUM_PREDATORS + constants.NUM_PREY]
-
-        # 构建新的字典
-
-        # all_actions =[]
-        # all_pred_actions, all_prey_actions = actions[:constants.NUM_PREDATORS],actions[constants.NUM_PREDATORS:]
-        # 独立处理每个组的动作
-        for group_name in self.group_map.keys():
-            if group_name == "predators":
-                group_actions = actions[:constants.NUM_PREDATORS]
-                agent_status = {k: self.simulator.agent_status[k] for k in list(self.simulator.agent_status.keys())[:constants.NUM_PREDATORS]}
-            if group_name == "preys":
-                group_actions = actions[constants.NUM_PREDATORS:]
-                agent_status = {k: self.simulator.agent_status[k] for k in selected_keys}
-            
-            # 获取每个组的数据，并将其展开添加到主列表中
-            group_states, group_rewards, group_dones, group_infos = self._step_group(group_name, group_actions,agent_status)
-            new_states.extend(group_states)
-            rewards.extend(group_rewards)
-            dones.extend(group_dones)
-            infos.extend(group_infos)
-
-
-        new_state_tensors = {
-            agent_key: torch.tensor(new_state, dtype=torch.float32)
-            for agent_key, new_state in zip(self.agent_keys, new_states)
-        }
-        sample_key = next(iter(new_state_tensors))
-        batch_size = new_state_tensors[sample_key].shape[0]
-        new_state_tensordict = TensorDict(new_state_tensors, batch_size=[batch_size])
-
-
-        reward_tensors = {
-            agent_key: torch.tensor(reward, dtype=torch.float32)
-            for agent_key, reward in zip(self.agent_keys, rewards)
-        }
-        sample_key = next(iter(reward_tensors))
-        # batch_size = reward_tensors[sample_key].shape[0]
-        reward_tensordict = TensorDict(reward_tensors, batch_size=[])
-
-
-        done_tensors = {
-            agent_key: torch.tensor(done, dtype=torch.float32)
-            for agent_key, done in zip(self.agent_keys, dones)
-        }
-        sample_key = next(iter(done_tensors))
-        # batch_size = done_tensors[sample_key].shape[0]
-        done_tensordict = TensorDict(done_tensors, batch_size=[])
-
-
-        # info_tensors = {
-        #     agent_key: torch.tensor(info, dtype=torch.float32)
-        #     for agent_key, info in zip(self.agent_keys, infos)
-        # }
-        # sample_key = next(iter(info_tensors))
-        # # batch_size = info_tensors[sample_key].shape[0]
-        # info_tensordict = TensorDict(info_tensors, batch_size=[])
-
-        # infos = {
-        #     f"info_{i}": info_item for i, info_item in enumerate(infos)
-        # }
-        # terminated = all(dones)   
-        # 将 observations 列表转换为 numpy 数组
-        # new_observations = np.array(new_state, dtype=np.float32)
-        # 调用模拟器的其他方法
-        self.simulator.add_food()  # 传递时间间隔
+        """Execute a step in the environment."""
+        # initialdicts = dict(zip(self.initialnames, actions))
+        self.simulator.add_food()
+        self.simulator.move_models(actions=actions)
         self.simulator.prey_hunt()
         self.simulator.check_collisions()
-        self.simulator.decrease_health()  # 更新健康值
-        self.simulator.remove_dead()  # 清理死亡个体
+        self.simulator.decrease_health()
+        # self.simulator.remove_dead()
 
-        return new_state_tensordict, reward_tensordict, done_tensordict, truncated, infos
-
-
-    # def _step_group(self, group_name, group_actions):
-    #     # 执行每个组的动作，并获取新的状态、奖励、是否完成和信息
-    #     new_observations = []
-    #     rewards = []
-    #     dones = []
-    #     infos = []
-    #     # print(np.shape(group_actions))
-    #     group = getattr(self.simulator, group_name)
-    #     for agent, action in zip(group, group_actions):
-    #         agent.move_strategy(action)
-    #         agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
-            
-    #         new_observations.append(agent.get_observe_info())
-    #         rewards.append(self._compute_reward(agent, group_name))
-    #         dones.append(not agent.is_alive)  # 这里假设死亡标志环境结束
-    #         infos.append({})  # 可以添加更多的调试信息
-
-    #     return new_observations, rewards, dones, infos
-    # def _step_group(self, group_name, group_actions):
-    #     # 执行每个组的动作，并获取新的状态、奖励、是否完成和信息
-    #     new_observations = []
-    #     rewards = []
-    #     dones = []
-    #     infos = []
+        self.current_step += 1
+        truncated = self.current_step >= self.max_steps
+        new_state, rewards, dones, infos = self._process_agents()
+        self.agents = [agent for agent, done in dones.items() if not done]
+        terminated = dones
+        return new_state, rewards, terminated, terminated, infos
         
-    #     group = getattr(self.simulator, group_name)
-    #     for agent, action in zip(group, group_actions):
-    #         agent.move_strategy(action)
-    #         agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
-            
-    #         new_observations.append(agent.get_observe_info())
-    #         rewards.append(self._compute_reward(agent, group_name))
-    #         dones.append(not agent.is_alive)  # 这里假设死亡标志环境结束
-    #         infos.append({})  # 可以添加更多的调试信息
-
-    #     return new_observations, rewards, dones, infos
-    def _step_group(self, group_name, group_actions, agent_status):
-        # 执行每个组的动作，并获取新的状态、奖励、是否完成和信息
-        temp_observations = {}
-        temp_rewards = {}
-        temp_dones = {}
-        temp_infos = {}
-
-        group = getattr(self.simulator, group_name)
-        
-        for agent, action in zip(group, group_actions):
-            agent.move_strategy(action)
-            agent.move(constants.CONTROL_PANEL_WIDTH, self.simulator.screen_width, self.simulator.screen_height, self.simulator.obstacles)
-            
-            temp_observations[agent.name] = agent.get_observe_info()
-            temp_rewards[agent.name] = self._compute_reward(agent, group_name)
-            temp_dones[agent.name] = not agent.is_alive  # 这里假设死亡标志环境结束
-            temp_infos[agent.name] = {}  # 可以添加更多的调试信息
-
-        # 根据 agent_status 比对结果，生成最终的列表
-        new_observations = []
-        rewards = []
-        dones = []
-        infos = []
-        
-        for agent_name in agent_status.keys():
-            if agent_name in temp_observations:
-                new_observations.append(temp_observations[agent_name])
-                rewards.append(temp_rewards[agent_name])
-                dones.append(temp_dones[agent_name])
-                infos.append(temp_infos[agent_name])
+    def _process_agents(self):
+        """Process each agent's state, reward, and done status."""
+        new_state, rewards, dones, infos = {}, {}, {}, {}
+        zero_data = {
+            'sight': [
+                (0, np.zeros(2, dtype=np.float32), 0) for _ in range(20)
+            ],
+            'hearing': np.zeros((5, 2), dtype=np.float32),
+            'delta_energy': np.array(0., dtype=np.float32)
+        }
+        for name in self.possible_agents:
+            matching_agent = next((agent for agent in self.simulator.preys + self.simulator.predators if agent.name == name), None)
+            if matching_agent and matching_agent.is_alive:
+                new_state[name]= matching_agent.get_observe_info()
+                rewards[name]=self._compute_reward(matching_agent)
+                dones[name]=False
+                infos[name]={}
             else:
-                new_observations.append(np.array(self.zero_list))  # 如果 agent 不存在，则返回0
-                rewards.append(0)  # 如果 agent 不存在，则返回0
-                dones.append(True)  # 如果 agent 不存在，则认为它完成了
-                infos.append({})  # 如果 agent 不存在，则返回空信息字典
+                new_state[name]=zero_data
+                rewards[name]=0
+                dones[name]=True # for test
+                infos[name]={}
+        return new_state, rewards, dones, infos
 
-        return new_observations, rewards, dones, infos
-
-
-
-    def _compute_reward(self, agent, group_name):
+    def _compute_reward(self, agent):
         # 根据组别计算奖励
-        if group_name == 'predators':
+        if agent.type == 'predator':
             # 捕食者奖励
             return agent.health if agent.health > 0 else -1.0
-        elif group_name == 'preys':
+        elif agent.type == 'prey':
             # 猎物奖励
             return agent.health if agent.health > 0 else -1.0
         return 0
 
-    def render(self):
-        """Renders the environment."""
-        grid = np.full((7, 7), " ")
-        grid[self.prisoner_y, self.prisoner_x] = "P"
-        grid[self.guard_y, self.guard_x] = "G"
-        grid[self.escape_y, self.escape_x] = "E"
-        print(f"{grid} \n")
+    def render(self, mode='human'):
+        """Render the environment."""
+        if not hasattr(self, 'screen'):
+            pygame.init()
+            self.screen = pygame.display.set_mode((self.simulator.screen_width, self.simulator.screen_height)) if mode == 'human' else pygame.Surface((self.simulator.screen_width, self.simulator.screen_height))
+
+        self.screen.fill((0, 0, 0))
+        self.simulator.draw_models(self.screen)
+        pygame.display.flip() if mode == 'human' else self._get_rgb_array()
+
+    def _get_rgb_array(self):
+        """Get the RGB array from the Pygame surface."""
+        return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+
+    def close(self):
+        """Close the environment."""
+        pass
+
+    def assign_algorithms_to_agents(self, len_agents, algorithm_names):
+        """Assign algorithms to agents."""
+        return [algorithm_names[i] if i < len(algorithm_names) else 'random' for i in range(len_agents)]
+
+
+def update_and_plot(iteration, env, data_storage):
+    """Update data and plot results."""
+    predator_count = len(env.simulator.predators)
+    prey_count = len(env.simulator.preys)
+    food_count = len(env.simulator.foods)
+
+    predator_total_health = sum(predator.health for predator in env.simulator.predators)
+    prey_total_health = sum(prey.health for prey in env.simulator.preys)
+    food_total_health = len(env.simulator.foods) * constants.FOOD_HEALTH_GAIN
+    total_energy = predator_total_health + prey_total_health + food_total_health
+
+    data_storage['iterations'].append(iteration)
+    data_storage['predator_counts'].append(predator_count)
+    data_storage['prey_counts'].append(prey_count)
+    data_storage['total_counts'].append(predator_count + prey_count)
+    data_storage['predator_healths'].append(predator_total_health)
+    data_storage['prey_healths'].append(prey_total_health)
+    data_storage['total_healths'].append(total_energy)
+
+    plt.clf()
+
+    plt.subplot(2, 1, 1)
+    plt.plot(data_storage['iterations'], data_storage['predator_counts'], label='Predator Count')
+    plt.plot(data_storage['iterations'], data_storage['prey_counts'], label='Prey Count')
+    plt.plot(data_storage['iterations'], data_storage['total_counts'], label='total Count')
+    plt.xlabel('Iteration')
+    plt.ylabel('Count')
+    plt.title('Number of Predators, Prey, and total Over Time')
+    plt.legend()
+
+    plt.subplot(2, 1, 2)
+    plt.plot(data_storage['iterations'], data_storage['predator_healths'], label='Predator Total Health')
+    plt.plot(data_storage['iterations'], data_storage['prey_healths'], label='Prey Total Health')
+    plt.plot(data_storage['iterations'], data_storage['total_healths'], label=' Total Health')
+    plt.xlabel('Iteration')
+    plt.ylabel('Total Health')
+    plt.title('')
+    plt.legend()
+
+    plt.pause(0.01)  # Pause to update the plot in real-time
 
 
 def run_random_simulation(env):
-    
-    # env = PredatorPreyEnv()
-    observations,infos = env.reset()
-    obs = observations
-    # print("Returned Observation:", obs)
-    # print("Observation Space Low:", env.observation_space.low)
-    # print("Observation Space High:", env.observation_space.high)
-    # print("Observation dtype:", obs.dtype)
-    # print("Expected dtype:", env.observation_space.dtype)
-    # assert env.observation_space.contains(obs), "Observation is out of bounds!"
+    """Run a random simulation with the environment."""
+    obs, info = env.reset()
 
-    # print(np.shape(observations),end="---")
-    # print(np.shape(env.observation_space))
-    # check_env_specs(env)
+    data_storage = {
+        'iterations': [],
+        'predator_counts': [],
+        'prey_counts': [],
+        'total_counts': [],
+        'predator_healths': [],
+        'prey_healths': [],
+        'total_healths': []
+    }
 
-    # check_env(env)
-    # rollout = env.rollout(10)
-    # print(f"rollout of {10} steps:", rollout)
-    # print("Shape of the rollout TensorDict:", rollout.batch_size)
-    
-
-    # observations = env.reset()
-    #print(np.shape(observation))
+    plt.figure(figsize=(10, 8))
+    plt.ion()
     done = False
     iteration = 0
     while not done:
-        # actions = {
-        #     'predators': generate_random_actions(len(env.simulator.predators), env.action_space),
-        #     'preys': generate_random_actions(len(env.simulator.preys), env.action_space),
-        # }
-        actions = env.action_space.sample()  # 从动作空间中采样一个随机动作 # you can change this with your algorithm
-        new_state, rewards, done, truncated,infos = env.step(actions)
-
-        # 判断是否所有智能体都已经完成
-        # done = all(all(done_group) for done_group in dones.values())
-        iteration +=1
-
-        # 渲染环境（可选）
         env.render()
-        if iteration % 100 == 1:   
+
+        if iteration % 100 == 1:
+            update_and_plot(iteration, env, data_storage)
+            print(len(env.simulator.predators),end="\t")
+            print(len(env.simulator.preys))
+
+        actions = env.action_space.sample()
+        new_state, rewards, done, truncated, infos = env.step(actions)
+        iteration += 1
+
+        if iteration % 100 == 1:
             pass
-            # print(f"iteration: {iteration}, num_predators: {len(env.simulator.predators)}, num_preys: {len(env.simulator.preys)}")
 
-            # print(iteration,end="\t")
-            # print(len(env.simulator.predators),end="\t")
-            # print(len(env.simulator.preys))
-        # 打印当前状态、奖励、是否结束
-            # print(f"New State: {new_state}")
-            # print(f"Rewards: {new_state}")
-            # print(len(new_state))
-            # print(f"Dones: {np.shape(done)}")
-            # print(f"Dones length:{len(done)}")
-            # print(f"Infos: {infos}")
+    plt.ioff()
+    plt.show()
 
-from pettingzoo.test import parallel_api_test
+
 if __name__ == "__main__":
+    prey_algorithms = ["PPO", "PPO", "PPO", "PPO", "DDPG", "DDPG", "DDPG"]
+    pred_algorithms = ["PPO", "PPO", "PPO", "DDPG", "DDPG", "DDPG"]
 
-    # register(
-    #     id='LISPredatorPreyZooEnv-v0',
-    #     entry_point='pettingzoo_env:LISPredatorPreyZooEnv',
-    # )
+    def ppo_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
 
-    # env = gym.make('LISPredatorPreyZooEnv-v0')
-    env = LISPredatorPreyEnvZoo()
-    parallel_api_test(env, num_cycles=1_000_000)
-    obs,infos = env.reset()  # 重置环境并获取初始观测
-    # print("Initial observation:", obs)
-    # print(env.simulator.agent_status)
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"ppo_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def dqn_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
 
-    # for _ in range(10):  # 运行10个时间步
-    #     action = env.action_space.sample()  # 随机采样一个动作
-    #     ew_observations, rewards, terminated, truncated, infos = env.step(action)  # 采取一步行动
-    #     # print(f"Observation: {obs}, Reward: {rewards}, Done: {terminated}, Info: {infos}")
-    #     print(f"Observation: {type(obs)}, Reward: {np.shape(rewards)}, Done: {np.shape(terminated)}, Info: {np.shape(infos)}")
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"dqn_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def random_predator_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
 
-    #     # print(np.shape(obs))
-    #     if terminated:
-    #         obs = env.reset()  # 如果环境结束了，则重置环境
-    
-    # check_env(env.unwrapped)
-    # check_env(env)
-    # run_random_simulation(env)
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"random_predator_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def ppo_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
+
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"ppo_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def dqn_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
+
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"dqn_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+    def random_prey_algorithm(observation_info, max_speed):## writing the function like this input observation_info and out put action action must fit
+        # 生成第一个变量a，离散值0或1
+        a = np.random.choice([0, 1])
+        
+        # 生成x和y，连续变量，代表速度
+        angle = np.random.uniform(0, 2 * np.pi)  # 随机角度
+        length = np.random.uniform(0, max_speed)  # 随机长度，速度范围内
+        x = length * np.cos(angle)  # x方向速度
+        y = length * np.sin(angle)  # y方向速度
+
+        # 将动作组合为(a, array([x, y]))，确保格式符合动作空间定义
+        action = (a, np.array([x, y], dtype=np.float32))
+        # if env.action_space.contains(action):# env action space : [a,x,y] a:from 0 to 1,x,y: ± max(constants.PREY_MAX_SPEED, constants.PREY_MAX_SPEED)
+        #     return action
+        # else:
+        #     raise ValueError(f"random_prey_algorithm Generated action {action} is out of the action space bounds.")
+        return action
+
+    predator_algorithms_predict = {
+        "PPO": lambda obs: ppo_predator_algorithm(obs, constants.PREY_MAX_SPEED), #change the function to yours ,must have random.
+        "DDPG": lambda obs: dqn_predator_algorithm(obs, constants.PREY_MAX_SPEED),
+        "random": lambda obs: random_predator_algorithm(obs, constants.PREY_MAX_SPEED)
+    }
+
+    prey_algorithms_predict = {
+        "PPO": lambda obs: ppo_prey_algorithm(obs, constants.PREY_MAX_SPEED),
+        "DDPG": lambda obs: dqn_prey_algorithm(obs, constants.PREY_MAX_SPEED),
+        "random": lambda obs: random_prey_algorithm(obs, constants.PREY_MAX_SPEED)
+    }
+
+    env = LISPredatorPreyEnv(
+        prey_algorithms=prey_algorithms,
+        pred_algorithms=pred_algorithms,
+        predator_algorithms_predict=predator_algorithms_predict,
+        prey_algorithms_predict=prey_algorithms_predict
+    )
+    # env = parallel_to_aec(env)
+    # # parallel_api_test(env)
+    # api_test(env, num_cycles=10, verbose_progress=True)
+    # parallel_api_test(env)
+    run_random_simulation(env)
