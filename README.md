@@ -3,9 +3,7 @@
 
 ## Running the Game
 
-We can run the game using the `main.py` file, which using a mathematically designed movement strategy. This file does not set up an environment.
-
-We can also run the game using the `gym_env_refactor.py` and `PPO_gym_env_refactor.py` file, which sets up an environment and uses a random strategy.(`#render()--> render()`)
+Currently, it is recommended to run the pettingzoo_env_V2.py file
 
 ---
 
