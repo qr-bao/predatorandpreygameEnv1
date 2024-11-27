@@ -8,12 +8,9 @@ Currently, it is recommended to run the pettingzoo_env_V2.py file
 ---
 
 ## Tasks need to do future
-- using one RL algorithm to play game
-- Refactoring and organizing the code.
-- Structuring the architecture and using appropriate variables.
+- using one RL algorithm to play game(finished)
 - The obstacle collision detection part currently has issues, and the edge collision detection function needs to be rewritten.(finished)
-- A new reproduction model has been adopted, so the game parameters need to be adjusted.
-- There are still many small bugs that need to be fixed.
+- A new reproduction model has been adopted, so the game parameters need to be adjusted.(finished)
 - 
 
 ---
